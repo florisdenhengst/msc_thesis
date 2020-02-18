@@ -5,6 +5,7 @@ import os
 import csv
 import codecs
 import io
+import re
 import sys
 import itertools
 import spacy 
@@ -268,20 +269,23 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
     tmp_name = os.path.join(data_path, 'tmp.csv')
     csv_name = os.path.join(data_path, '_'.join(sources) + '.csv')
     lengths = []
-    
+    p = re.compile('@@@ enti@@ ty@@ ')
+
     with open(tmp_name, 'w') as tmp_file:
     
         print(f'Writing to {tmp_name}, and byte pair encoding...')
         writer = csv.DictWriter(tmp_file, fieldnames=processed_data.keys())
         for no, sample in enumerate(dataset):
             if sample['source'] in sources:
-                sample['stories'] = bpencoder.encode(sample['stories'])
-                sample['summary'] = bpencoder.encode(sample['summary'])
+                sample['stories'] = p.sub('@entity', bpencoder.encode(sample['stories']))
+                sample['summary'] = p.sub('@entity', bpencoder.encode(sample['summary']))
+
                 lengths.append(sample['length_tokens'])
 
                 writer.writerow(sample)
                 if no % 2000 == 0 and no != 0:
                     print(f'Progress: {no}/{len(dataset)} processed.')
+                    break
                     if no_samples is not None and no % no_samples == 0:
                         break
     bins = equal_bin(np.asarray(lengths), 10)
