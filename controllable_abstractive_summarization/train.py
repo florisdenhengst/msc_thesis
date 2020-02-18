@@ -5,6 +5,7 @@ import argparse
 import torch
 import torch.nn as nn
 import numpy as np
+import re
 
 from collections import Counter
 from rouge import Rouge
@@ -21,8 +22,9 @@ NO_LEN_TOKENS = 10
 
 def add_tokens_to_vocab(txt_field, tokens):
     for token in tokens:
-        txt_field.vocab.stoi[token] = len(txt_field.vocab.stoi)
-        txt_field.vocab.itos.append(token)
+        if token not in txt_field.vocab.stoi:
+            txt_field.vocab.stoi[token] = len(txt_field.vocab.stoi)
+            txt_field.vocab.itos.append(token)
     return txt_field
 
 
@@ -34,6 +36,48 @@ def exclude_token(summaries, eos):
         new_summaries.append(torch.cat((summ[0:eos_idx], summ[eos_idx+1:])))
     
     return torch.stack(new_summaries)
+
+def get_lead_3(story, txt_field, sent_end_inds):    
+    lead_3 = []
+    for single in story:
+        sents, ends = [], 0
+        for ind in single:
+            if ends < 3:
+                if ind == txt_field.vocab.stoi['<eos>']:
+                    break
+                else:                    
+                    sents.append(txt_field.vocab.itos[ind])
+            else:
+                break
+            if ind in sent_end_inds:
+                ends += 1 
+        lead_3.append(' '.join(sents))
+    return lead_3
+
+def extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field):
+    lead_3_entities = [re.findall(r"@entity\d+", lead) for lead in lead_3]
+    sum_entities = [re.findall(r"@entity\d+", summ) for summ in summary_to_rouge]
+
+    entities_to_prepend = []
+    entities_lens = []
+
+    assert len(sum_entities) == len(lead_3_entities)
+    for no in range(len(sum_entities)):
+        ents = set([item for item in sum_entities[no] if item not in lead_3_entities[no]])
+        ent_inds = [txt_field.vocab.stoi[item] for item in ents]        
+        entities_lens.append(len(ent_inds))
+        entities_to_prepend.append(ent_inds)
+    
+    assert len(entities_to_prepend) == len(lead_3_entities)
+    max_len = max(entities_lens)
+
+    for no in range(len(entities_to_prepend)):
+        while len(entities_to_prepend[no]) != max_len:
+            entities_to_prepend[no].insert(0, txt_field.vocab.stoi[txt_field.pad_token])
+        entities_to_prepend[no] = torch.tensor(entities_to_prepend[no])
+
+    return torch.stack(entities_to_prepend)
+
 
 def train():
     data_path = os.path.join(os.getcwd(), 'data/')
@@ -86,17 +130,23 @@ def train():
     # train_iter = MyIterator(dataset, batch_size=20000, device=0, repeat=False, 
     #                     sort_key= lambda x:(len(x.stories), len(x.summary)),
     #                     batch_size_fn=batch_size_fn, train=True, shuffle=True)
-    if args.val is 0:
-        val_iter = None
-    else:
+    if args.val:
         val_dataset = TabularDataset(path=os.path.join(data_path, 'cnn_val.csv'), format='csv', skip_header=True, fields=train_fields)
         val_iter = BucketIterator(dataset=val_dataset, batch_size=len(val_dataset), 
             sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
+    else:
+        val_iter = None
+
+    print(f'Initializing model with. Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim}',
+        f'hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel,',
+        f' {args.dropout_prob} dropout, sharing weights: {args.share_weights}.')
 
     model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
                                     hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
-                                    dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, share_weights=True)
-    
+                                    dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, share_weights=args.share_weights)
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    no_params = sum([np.prod(p.size()) for p in model_parameters])
+    print(f'{no_params} trainable parameters in the model.')
     crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.2, momentum=0.99, nesterov=True)
     
@@ -112,24 +162,27 @@ def train():
     epoch_loss = 0
     rouge_scores = None
     rouge_count = 0
+    sent_end_tokens = ['.', '!', '?']
+    sent_end_inds = [txt_field.vocab.stoi[token] for token in sent_end_tokens]
+    model.train()
     for no, batch in enumerate(train_iter):
         story, summary = batch.stories, batch.summary
-        
-        len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
-        src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
-        story = torch.cat((len_tensor, src_tensor, story), dim=1)
-
-
-        return
-
-
-        model.train()
-        optimizer.zero_grad()
+        lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
+        summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
         summary_to_pass = exclude_token(summary, eos_idx)
         
+
+        len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
+        src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
+        ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
+
+        story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
+
+        
+        optimizer.zero_grad()
+
         output, _ = model(story, summary_to_pass) # second output is attention 
 
-        summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
         output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
 
         if rouge_scores is None:
@@ -143,15 +196,10 @@ def train():
                 else:
                     rouge_scores[key] = dict(rouge_scores[key]) 
         rouge_count += 1
-
         
         output = output.contiguous().view(-1, output.shape[-1])
         summary = summary[:,1:].contiguous().view(-1)
-        # print(output.shape)
-        # print(summary.shape)
-
         loss = crossentropy(output, summary)
-
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
         optimizer.step()
@@ -197,14 +245,17 @@ if __name__ == '__main__':
                         help='predictor learning rate')
     parser.add_argument('--seed', type=int, default=None,
                         help='Train with a fixed seed')
-    parser.add_argument('--val', type=int, default=0,
+    parser.add_argument('--val', action='store_true',
                         help='Use validation set')
+    parser.add_argument('--share_weights', action='store_true',
+                        help='Share weights between encoder and decoder as per Fan')
     parser.add_argument('--save_model_to', type=str, default="saved_models/",
                         help='Output path for saved model')
     parser.add_argument('--no_len_tokens', type=int, default=NO_LEN_TOKENS,
                         help='Number of bins for summary lengths in terms of tokens.')
 
     args = parser.parse_args()
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
