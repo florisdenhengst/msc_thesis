@@ -38,8 +38,8 @@ class ControllableSummarizer(nn.Module):
             self.pos_embedding = None
             self.hid2emb = None
 
-        self.encoder = ConvEncoder(input_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, self.tok_embedding, self.pos_embedding, self.hid2emb)
-        self.decoder = ConvDecoder(output_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, self.tok_embedding, self.pos_embedding, self.hid2emb)
+        self.encoder = ConvEncoder(input_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
+        self.decoder = ConvDecoder(output_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, 1, max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
 
     def forward(self, src_tokens, trg_tokens):
         # print(src_tokens.shape)
@@ -173,7 +173,7 @@ class ConvDecoder(nn.Module):
         self.scale = torch.sqrt(torch.FloatTensor([0.5])).to(device)
         
         if tok_embedding is None and pos_embedding is None:
-            self.tok_embedding = nn.Embedding(input_dim, emb_dim)
+            self.tok_embedding = nn.Embedding(output_dim, emb_dim)
             nn.init.normal_(self.tok_embedding.weight, 0, 0.1)
             nn.init.constant_(self.tok_embedding.weight[padding_idx], 0)
 
