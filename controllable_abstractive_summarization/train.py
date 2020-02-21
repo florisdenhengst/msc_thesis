@@ -90,7 +90,7 @@ def extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field):
 def train():
     data_path = os.path.join(os.getcwd(), 'data/')
 
-    nlp = spacy.load("en", disable=["tagger", "parser", "ner"])
+    nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "ner"])
     txt_field = Field(tokenize=lambda x: [tok.text for tok in nlp.tokenizer(x)], 
                         init_token='<sos>', eos_token='<eos>', lower=True, batch_first=True)
     num_field = Field(sequential=False, use_vocab=False)
