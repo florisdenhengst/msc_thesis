@@ -1,6 +1,6 @@
 # coding=utf-8
 # coding: utf-8
-
+import argparse
 import os
 import csv
 import codecs
@@ -91,7 +91,7 @@ class BPEncoder():
             return [self.bpe.process_line(line) for line in story]
 
 class CNNDM(Dataset):
-    def __init__(self, data_path, cut_off_length=None):
+    def __init__(self, data_path, cut_off_length=None, sources=['cnn', 'dailymail']):
         super(CNNDM).__init__()
         # print(os.path.join(data_path, '/cnn/stories/'))
         # print(os.path.join('.', '/cnn/stories/'))
@@ -103,11 +103,20 @@ class CNNDM(Dataset):
 
         self.cnn_stories = os.listdir(os.path.join(data_path, 'cnn/stories/'))
         self.dm_stories = os.listdir(os.path.join(data_path, 'dailymail/stories'))
-        self.stories = self.cnn_stories + self.dm_stories
-        self.sources = ['cnn' for i in range(len(self.cnn_stories))] + ['dailymail' for i in range(len(self.dm_stories))]
+        
+        self.stories = []
+        self.sources = []
+        if 'cnn' in sources:
+            self.stories += self.cnn_stories 
+            self.sources += ['cnn' for i in range(len(self.cnn_stories))]
+        if 'dailymail' in sources:
+            self.stories += self.dm_stories
+            self.sources += ['dailymail' for i in range(len(self.dm_stories))]
+        
+         
 
     def __len__(self):
-        assert len(self.cnn_stories) + len(self.dm_stories) == len(self.stories)
+        # assert len(self.cnn_stories) + len(self.dm_stories) == len(self.stories)
         return len(self.stories)
 
     def __getitem__(self, idx):
@@ -255,9 +264,9 @@ class CNNDM(Dataset):
 
 def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources=['cnn', 'dailymail'], no_samples=None, cut_off_length=None):
     
-    print('Loading data and BPE codes...', end='')
+    print(f'Loading data from {sources} and BPE codes...', end='')
 
-    dataset = CNNDM(data_path, cut_off_length=cut_off_length)
+    dataset = CNNDM(data_path, cut_off_length, sources)
     with open(os.path.join(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
         bpencoder = BPEncoder(codes)
     
@@ -276,18 +285,17 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
         print(f'Writing to {tmp_name}, and byte pair encoding...')
         writer = csv.DictWriter(tmp_file, fieldnames=processed_data.keys())
         for no, sample in enumerate(dataset):
-            if sample['source'] in sources:
-                sample['stories'] = p.sub('@entity', bpencoder.encode(sample['stories']))
-                sample['summary'] = p.sub('@entity', bpencoder.encode(sample['summary']))
+            
+            sample['stories'] = p.sub('@entity', bpencoder.encode(sample['stories']))
+            sample['summary'] = p.sub('@entity', bpencoder.encode(sample['summary']))
 
-                lengths.append(sample['length_tokens'])
+            lengths.append(sample['length_tokens'])
 
-                writer.writerow(sample)
-                if no % 2000 == 0 and no != 0:
-                    print(f'Progress: {no}/{len(dataset)} processed.')
+            writer.writerow(sample)
+            if no % 500 == 0 and no != 0:
+                print(f'Progress: {no}/{len(dataset)} processed.')
+                if no_samples is not None and no % no_samples == 0:
                     break
-                    if no_samples is not None and no % no_samples == 0:
-                        break
     bins = equal_bin(np.asarray(lengths), 10)
     len_hist = np.histogram(lengths, 10)
 
@@ -326,7 +334,19 @@ def equal_bin(N, m):
     
 
 if __name__ == '__main__':
-    anonymize_and_bpe_data(sources=['cnn'], no_samples=5000, cut_off_length=400)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cnn', action='store_true',
+                        help='Use cnn data')
+    parser.add_argument('--dailymail', action='store_true',
+                        help='Use dailymail data')
+    parser.add_argument('--no_samples', type=int, default=5000,
+                        help='number of samples')
+
+    args = parser.parse_args()    
+    sources = []
+    if args.cnn: sources.append('cnn') 
+    if args.dailymail: sources.append('dailymail') 
+    anonymize_and_bpe_data(sources=sources, no_samples=args.no_samples, cut_off_length=400)
 
 
 
