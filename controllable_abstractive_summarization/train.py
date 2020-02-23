@@ -240,7 +240,7 @@ def train():
             
             output = output.contiguous().view(-1, output.shape[-1])
             summary = summary[:,1:].contiguous().view(-1)
-            loss = crossentropy(output, summary)
+            loss = crossentropy(output, summary.to(device))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
             optimizer.step()
@@ -260,10 +260,10 @@ def train():
             with model.eval() and torch.no_grad():
                 batch = next(iter(val_iter))
                 summary_to_pass = exclude_token(batch.summary, eos_idx)
-                output, _ = model(batch.stories, summary_to_pass)
+                output, _ = model(batch.stories.to(device), summary_to_pass.to(device))
                 output = output.contiguous().view(-1, output.shape[-1])
                 summary = batch.summary[:,1:].contiguous().view(-1)
-                val_loss = crossentropy(output, summary)
+                val_loss = crossentropy(output, summary.to(device))
                 scheduler.step(val_loss)
                 summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in batch.summary]
                 output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
