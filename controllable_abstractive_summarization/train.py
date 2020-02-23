@@ -174,7 +174,7 @@ def train():
 
     model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
                                     hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
-                                    dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, share_weights=args.share_weights)
+                                    dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, share_weights=args.share_weights).to(device)
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     no_params = sum([np.prod(p.size()) for p in model_parameters])
     logger.info(f'{no_params} trainable parameters in the model.')
