@@ -25,6 +25,8 @@ KERNEL_SIZE = 3 # from paper
 DROPOUT_PROB = 0.2 # from paper 
 NO_LEN_TOKENS = 10
 
+
+
 logger = logging.getLogger('Training log')
 coloredlogs.install(logger=logger, level='DEBUG', fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -221,7 +223,7 @@ def train():
 
             optimizer.zero_grad()
 
-            output, _ = model(story, summary_to_pass) # second output is attention 
+            output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
 
             output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
 
