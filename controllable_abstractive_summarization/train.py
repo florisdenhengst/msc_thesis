@@ -356,8 +356,9 @@ def train():
 
         os.makedirs(args.save_model_to, exist_ok=True)
         if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model')):
-          os.remove(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model'))
-
+            logger.info('Removing model from previous epoch...')
+            os.remove(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model'))
+        logger.info(f'Saving model at epoch {epoch}.')
         torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
 
 
