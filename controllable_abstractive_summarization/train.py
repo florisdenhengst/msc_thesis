@@ -222,6 +222,7 @@ def train():
         epoch_loss = 0
         rouge_scores = None
         batch_count = 0
+        val_batch_count = 0
 
         model.train()
         logger.info(f'Training, epoch {epoch}.')
@@ -278,36 +279,49 @@ def train():
             
             with model.eval() and torch.no_grad():
                 for batch in val_iter:
-                story, summary = batch.stories, batch.summary
+                    val_batch_count += 1
+                    story, summary = batch.stories, batch.summary
 
-                lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
-                summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
-                summary_to_pass = exclude_token(summary, eos_idx)
-                len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
-                src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
-                ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
+                    lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
+                    summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
+                    summary_to_pass = exclude_token(summary, eos_idx)
+                    len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
+                    src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
+                    ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
 
-                story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
+                    story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
 
-                output, _ = model(batch.stories.to(device), summary_to_pass.to(device))
-                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
+                    output, _ = model(batch.stories.to(device), summary_to_pass.to(device))
+                    output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
 
-                val_rouge_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
+                    if val_rouge_scores is None:
+                        val_rouge_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
+                    else: 
+                        temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
+                        val_rouge_scores = {key: Counter(val_rouge_scores[key]) + Counter(temp_scores[key]) for key in val_rouge_scores.keys()}
+                        for key in val_rouge_scores:
+                            if len(val_rouge_scores[key]) == 0:
+                                val_rouge_scores[key] = {'f': 0.0, 'p': 0.0, 'r': 0.0}
+                            else:
+                                val_rouge_scores[key] = dict(val_rouge_scores[key]) 
 
-                output = output.contiguous().view(-1, output.shape[-1])
-                summary = summary[:,1:].contiguous().view(-1)
-                
-                val_loss = crossentropy(output, summary.to(device))
-                scheduler.step(val_loss)
-                
-                
-                metrics['val_loss'].append(val_loss.item())
-                metrics['val_rouge'].append(val_rouge_scores)
+                    output = output.contiguous().view(-1, output.shape[-1])
+                    summary = summary[:,1:].contiguous().view(-1)
+                    
+                    val_loss = crossentropy(output, summary.to(device))
+                    val_epoch_loss += val_loss.item()
+                    scheduler.step(val_loss)
+                    
+                    
+                    
         else:
             scheduler.step()
         
         logger.info(f'Current learning rate is: {optimizer.param_groups["lr"]}')
         rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
+        metrics['val_loss'].append(val_epoch_loss / val_batch_count)
+        metrics['val_rouge'].append(val_rouge_scores)
+        
         metrics['train_loss'].append(epoch_loss / batch_count)
         metrics['train_rouge'].append(val_rouge_scores)
         logger.info(metrics)
