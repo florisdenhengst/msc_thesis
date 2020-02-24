@@ -227,7 +227,7 @@ class ConvDecoder(nn.Module):
             #need to pad so decoder can't "cheat"
             padding = torch.zeros(batch_size, 
                                   self.hid_dim, 
-                                  self.kernel_size - 1).fill_(self.padding_idx).to(self.device)                
+                                  self.kernel_size - 1).contiguous().fill_(self.padding_idx).to(self.device)                
             padded_conv_input = torch.cat((padding, 
                                     conv_input), dim = 2)           #padded_conv_input = [batch size, hid dim, trg len + kernel size - 1]
         
