@@ -135,8 +135,12 @@ def train():
     
     logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
     
-    train_iter = BucketIterator(dataset=train_data, batch_size=args.batch_size, 
-            sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=True)
+    # train_iter = BucketIterator(dataset=train_data, batch_size=args.batch_size, 
+    #         sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=True)
+    batch_tokens = 800 * args.batch_size
+    train_iter = MyIterator(dataset=train_data, batch_size=batch_tokens, 
+        sort_key= lambda x:(len(x.stories), len(x.summary)),
+        batch_size_fn=batch_size_fn, train=True, shuffle=True)
 
     val_iter = BucketIterator(dataset=val_data, batch_size=256, 
             sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
@@ -187,7 +191,7 @@ def train():
                                     hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
                                     dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
                                     share_weights=args.share_weights, max_length=max_len).to(device)
-    
+
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     no_params = sum([np.prod(p.size()) for p in model_parameters])
     logger.info(f'{no_params} trainable parameters in the model.')
@@ -263,6 +267,7 @@ def train():
             if no % 10:
                 logger.info(f'Batch {no}, processed {no_samples} stories.')
                 logger.info(f'Average loss: {epoch_loss / no}.')
+                logger.info(f'Latest ROUGE: {temp_scores}.')
                 logger.info('Output sample:')
                 logger.info(f'{output_to_rouge[0]}')
                 logger.info('Ground truth:')
@@ -272,16 +277,30 @@ def train():
         if val_iter is not None:
             
             with model.eval() and torch.no_grad():
-                batch = next(iter(val_iter))
-                summary_to_pass = exclude_token(batch.summary, eos_idx)
+                for batch in val_iter:
+                story, summary = batch.stories, batch.summary
+
+                lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
+                summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
+                summary_to_pass = exclude_token(summary, eos_idx)
+                len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
+                src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
+                ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
+
+                story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
+
                 output, _ = model(batch.stories.to(device), summary_to_pass.to(device))
+                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
+
+                val_rouge_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
+
                 output = output.contiguous().view(-1, output.shape[-1])
-                summary = batch.summary[:,1:].contiguous().view(-1)
+                summary = summary[:,1:].contiguous().view(-1)
+                
                 val_loss = crossentropy(output, summary.to(device))
                 scheduler.step(val_loss)
-                summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in batch.summary]
-                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
-                val_rouge_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
+                
+                
                 metrics['val_loss'].append(val_loss.item())
                 metrics['val_rouge'].append(val_rouge_scores)
         else:
