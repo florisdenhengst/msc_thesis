@@ -175,13 +175,28 @@ def train():
     
     logger.info(f'finished in {end-start} seconds.')
 
-
+    
     stories_len = []
     summaries_len = []
+    st_all_tokens = 0
+    sm_all_tokens = 0
+    st_pads = 0
+    sm_pads = 0
+    
     for batch in train_iter:
         stories_len.append(batch.stories.shape[1])
         summaries_len.append(batch.summary.shape[1])
+        if if args.count_pads:
+            st_all_tokens += batch.stories.shape[0] * batch.stories.shape[1] 
+            sm_all_tokens += batch.summary.shape[0] * batch.summary.shape[1] 
+            st_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.stories])
+            sm_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.summary])
+
+    if args.count_pads:
+        logger.info(f'In stories, pads are {100*st_pads/st_all_tokens} of all tokens.')
+        logger.info(f'In summaries, pads are {100*sm_pads/sm_all_tokens} of all tokens.')
     max_len = max([max(stories_len), max(summaries_len)])
+    
 
     logger.info(f'Initializing model with:') 
     logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
