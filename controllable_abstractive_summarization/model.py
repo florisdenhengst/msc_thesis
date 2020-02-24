@@ -210,7 +210,8 @@ class ConvDecoder(nn.Module):
         #create position tensor
         pos = self.pos_embedding(torch.arange(0, trg_tokens.shape[1]).unsqueeze(0).repeat(batch_size, 1).to(self.device))
         tok = self.tok_embedding(trg_tokens)                        #tok = pos = [batch size, trg len, emb dim]
-        
+        print(pos.shape)
+        print(tok.shape)
         #combine embeddings by elementwise summing
         x = self.dropout(tok + pos)                                 #x = [batch size, trg len, emb dim]
         
@@ -227,7 +228,7 @@ class ConvDecoder(nn.Module):
             #need to pad so decoder can't "cheat"
             padding = torch.zeros(batch_size, 
                                   self.hid_dim, 
-                                  self.kernel_size - 1).contiguous().fill_(self.padding_idx).to(self.device)                
+                                  self.kernel_size - 1).fill_(self.padding_idx).to(self.device)                
             padded_conv_input = torch.cat((padding, 
                                     conv_input), dim = 2)           #padded_conv_input = [batch size, hid dim, trg len + kernel size - 1]
         
