@@ -1,3 +1,4 @@
+import sys
 import math
 import os
 import time
@@ -25,6 +26,7 @@ KERNEL_SIZE = 3 # from paper
 DROPOUT_PROB = 0.2 # from paper 
 NO_LEN_TOKENS = 10
 BATCH_SIZE = 32
+
 
 
 
@@ -196,6 +198,10 @@ def train():
         logger.info(f'In stories, pads are {100*st_pads/st_all_tokens} of all tokens.')
         logger.info(f'In summaries, pads are {100*sm_pads/sm_all_tokens} of all tokens.')
     max_len = max([max(stories_len), max(summaries_len)])
+    if max_len > 1000:
+        sys.setrecursionlimit(max_len + 10)
+    else:
+        sys.setrecursionlimit(1500)
     
 
     logger.info(f'Initializing model with:') 
@@ -282,7 +288,7 @@ def train():
             optimizer.step()
             epoch_loss += loss.item()
             no_samples += len(batch.stories)
-            if no % 10:
+            if no % 10 == 0:
                 logger.info(f'Batch {no}, processed {no_samples} stories.')
                 logger.info(f'Average loss: {epoch_loss / no}.')
                 logger.info(f'Latest ROUGE: {temp_scores}.')
@@ -349,6 +355,9 @@ def train():
         logger.info(f'{summary_to_rouge[0]}')
 
         os.makedirs(args.save_model_to, exist_ok=True)
+        if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model')):
+          os.remove(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model'))
+
         torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
 
 
