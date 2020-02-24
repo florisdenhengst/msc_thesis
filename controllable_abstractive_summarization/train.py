@@ -319,7 +319,7 @@ def train():
         else:
             scheduler.step()
         
-        logger.info(f'Current learning rate is: {optimizer.param_groups["lr"]}')
+        logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
         rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
         val_rouge_scores = {key: {metric: float(val_rouge_scores[key][metric]/batch_count) for metric in val_rouge_scores[key].keys()} for key in val_rouge_scores.keys()}
         metrics['val_loss'].append(val_epoch_loss / val_batch_count)
