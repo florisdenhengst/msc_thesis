@@ -26,6 +26,7 @@ DROPOUT_PROB = 0.2 # from paper
 NO_LEN_TOKENS = 10
 BATCH_SIZE = 32
 
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 
 logger = logging.getLogger('Training log')
