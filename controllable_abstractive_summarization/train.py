@@ -132,7 +132,7 @@ def train():
     
     logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
     
-    train_iter = BucketIterator(dataset=train_data, batch_size=24, 
+    train_iter = BucketIterator(dataset=train_data, batch_size=32, 
             sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=True)
 
     val_iter = BucketIterator(dataset=val_data, batch_size=256, 
@@ -174,7 +174,8 @@ def train():
 
     model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
                                     hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
-                                    dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, share_weights=args.share_weights).to(device)
+                                    dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
+                                    share_weights=args.share_weights, max_length=800).to(device)
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     no_params = sum([np.prod(p.size()) for p in model_parameters])
     logger.info(f'{no_params} trainable parameters in the model.')
