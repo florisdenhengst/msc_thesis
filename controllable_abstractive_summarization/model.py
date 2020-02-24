@@ -210,8 +210,6 @@ class ConvDecoder(nn.Module):
         #create position tensor
         pos = self.pos_embedding(torch.arange(0, trg_tokens.shape[1]).unsqueeze(0).repeat(batch_size, 1).to(self.device))
         tok = self.tok_embedding(trg_tokens)                        #tok = pos = [batch size, trg len, emb dim]
-        print(pos.shape)
-        print(tok.shape)
         #combine embeddings by elementwise summing
         x = self.dropout(tok + pos)                                 #x = [batch size, trg len, emb dim]
         
