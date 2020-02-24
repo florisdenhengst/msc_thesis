@@ -186,7 +186,7 @@ def train():
     for batch in train_iter:
         stories_len.append(batch.stories.shape[1])
         summaries_len.append(batch.summary.shape[1])
-        if if args.count_pads:
+        if args.count_pads:
             st_all_tokens += batch.stories.shape[0] * batch.stories.shape[1] 
             sm_all_tokens += batch.summary.shape[0] * batch.summary.shape[1] 
             st_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.stories])
