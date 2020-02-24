@@ -220,6 +220,7 @@ def train():
         epoch += 1
         no_samples = 0
         epoch_loss = 0
+        val_epoch_loss = 0
         rouge_scores = None
         val_rouge_scores = None
         batch_count = 0
@@ -320,11 +321,12 @@ def train():
         
         logger.info(f'Current learning rate is: {optimizer.param_groups["lr"]}')
         rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
+        val_rouge_scores = {key: {metric: float(val_rouge_scores[key][metric]/batch_count) for metric in val_rouge_scores[key].keys()} for key in val_rouge_scores.keys()}
         metrics['val_loss'].append(val_epoch_loss / val_batch_count)
         metrics['val_rouge'].append(val_rouge_scores)
         
         metrics['train_loss'].append(epoch_loss / batch_count)
-        metrics['train_rouge'].append(val_rouge_scores)
+        metrics['train_rouge'].append(rouge_scores)
         logger.info(metrics)
         logger.info('Output sample:')
         logger.info(f'{output_to_rouge}')
