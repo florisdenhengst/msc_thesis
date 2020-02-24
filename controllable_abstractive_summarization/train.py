@@ -104,6 +104,7 @@ def train():
                     ('length_sentences', num_field), ('source', txt_nonseq_field), 
                     ('entities', None), ('summary', txt_field)]
     
+    logger.info(f'Training on {device} ')
     logger.info('Started loading data...')
 
     start = time.time()
@@ -171,13 +172,22 @@ def train():
     logger.info(f'finished in {end-start} seconds.')
 
 
+    stories_len = []
+    summaries_len = []
+    for batch in train_iter:
+        stories_len.append(batch.stories.shape[1])
+        summaries_len.append(batch.summary.shape[1])
+    max_len = max([max(stories_len), max(summaries_len)])
+
     logger.info(f'Initializing model with:') 
-    logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}.')
+    logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
+
 
     model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
                                     hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
                                     dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
-                                    share_weights=args.share_weights, max_length=800).to(device)
+                                    share_weights=args.share_weights, max_length=max_len).to(device)
+    
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     no_params = sum([np.prod(p.size()) for p in model_parameters])
     logger.info(f'{no_params} trainable parameters in the model.')
@@ -200,6 +210,7 @@ def train():
     
     
     logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
+
 
     while optimizer.param_groups[0]['lr'] > 1e-5:
         epoch += 1
