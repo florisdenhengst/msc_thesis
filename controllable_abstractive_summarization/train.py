@@ -333,8 +333,8 @@ def train():
         logger.info('Ground truth:')
         logger.info(f'{summary_to_rouge}')
 
-        os.makedirs(config.save_model_to, exist_ok=True)
-        torch.save(model.state_dict(), os.path.join(config.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
+        os.makedirs(args.save_model_to, exist_ok=True)
+        torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
 
 
 
