@@ -26,7 +26,7 @@ DROPOUT_PROB = 0.2 # from paper
 NO_LEN_TOKENS = 10
 BATCH_SIZE = 32
 
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
 
 
 logger = logging.getLogger('Training log')
@@ -325,15 +325,24 @@ if __name__ == '__main__':
                         help='Train full model')
     parser.add_argument('--share_weights', action='store_true',
                         help='Share weights between encoder and decoder as per Fan')
+    parser.add_argument('--debug', action='store_true',
+                        help='Debug for CUDA or not')
+    parser.add_argument('--cpu', action='store_true',
+                        help='Use CPU for training')
     parser.add_argument('--save_model_to', type=str, default="saved_models/",
                         help='Output path for saved model')
     parser.add_argument('--no_len_tokens', type=int, default=NO_LEN_TOKENS,
                         help='Number of bins for summary lengths in terms of tokens.')
 
     args = parser.parse_args()
-    
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.debug:
+        os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
+    if args.cpu:
+        device = torch.device("cpu")
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
     train()
