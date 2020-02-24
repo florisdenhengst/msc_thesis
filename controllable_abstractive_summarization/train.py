@@ -221,6 +221,7 @@ def train():
         no_samples = 0
         epoch_loss = 0
         rouge_scores = None
+        val_rouge_scores = None
         batch_count = 0
         val_batch_count = 0
 
