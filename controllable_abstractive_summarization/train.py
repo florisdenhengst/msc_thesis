@@ -327,7 +327,7 @@ def train():
                     
                     val_loss = crossentropy(output, summary.to(device))
                     val_epoch_loss += val_loss.item()
-                    scheduler.step(val_loss)
+                scheduler.step(val_epoch_loss)
                     
                     
                     
@@ -389,6 +389,8 @@ if __name__ == '__main__':
                         help='Share weights between encoder and decoder as per Fan')
     parser.add_argument('--debug', action='store_true',
                         help='Debug for CUDA or not')
+    parser.add_argument('--count_pads', action='store_true',
+                        help='Count what % paddings in batches are or not')
     parser.add_argument('--cpu', action='store_true',
                         help='Use CPU for training')
     parser.add_argument('--save_model_to', type=str, default="saved_models/",
