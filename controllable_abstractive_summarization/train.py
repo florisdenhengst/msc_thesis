@@ -286,10 +286,10 @@ def train():
                 logger.info(f'Batch {no}, processed {no_samples} stories.')
                 logger.info(f'Average loss: {epoch_loss / no}.')
                 logger.info(f'Latest ROUGE: {temp_scores}.')
-                logger.info('Output sample:')
-                logger.info(f'{output_to_rouge[0]}')
-                logger.info('Ground truth:')
-                logger.info(f'{summary_to_rouge[0]}')
+                # logger.info('Output sample:')
+                # logger.info(f'{output_to_rouge[0]}')
+                # logger.info('Ground truth:')
+                # logger.info(f'{summary_to_rouge[0]}')
 
         
         if val_iter is not None:
@@ -344,9 +344,9 @@ def train():
         metrics['train_rouge'].append(rouge_scores)
         logger.info(metrics)
         logger.info('Output sample:')
-        logger.info(f'{output_to_rouge}')
+        logger.info(f'{output_to_rouge[0]}')
         logger.info('Ground truth:')
-        logger.info(f'{summary_to_rouge}')
+        logger.info(f'{summary_to_rouge[0]}')
 
         os.makedirs(args.save_model_to, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
