@@ -231,12 +231,13 @@ def train():
     sent_end_inds = [txt_field.vocab.stoi[token] for token in sent_end_tokens]
     
     epoch = 0
+    recursion_count = 0
     metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
     
     
     logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
 
-
+    
     while optimizer.param_groups[0]['lr'] > 1e-5:
         epoch += 1
         no_samples = 0
@@ -268,11 +269,15 @@ def train():
             output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
 
             output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
-
-            if rouge_scores is None:
-                rouge_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
-            else: 
+            
+            try:
                 temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
+            except RecursionError:
+                recursion_count += 1
+                temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
+            if rouge_scores is None:
+                rouge_scores = temp_scores
+            else: 
                 rouge_scores = {key: Counter(rouge_scores[key]) + Counter(temp_scores[key]) for key in rouge_scores.keys()}
                 for key in rouge_scores:
                     if len(rouge_scores[key]) == 0:
@@ -316,11 +321,14 @@ def train():
 
                     output, _ = model(batch.stories.to(device), summary_to_pass.to(device))
                     output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
-
-                    if val_rouge_scores is None:
-                        val_rouge_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
-                    else: 
+                    try:
                         temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
+                    except RecursionError:
+                        recursion_count += 1
+                        temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
+                    if val_rouge_scores is None:
+                        val_rouge_scores = temp_scores
+                    else: 
                         val_rouge_scores = {key: Counter(val_rouge_scores[key]) + Counter(temp_scores[key]) for key in val_rouge_scores.keys()}
                         for key in val_rouge_scores:
                             if len(val_rouge_scores[key]) == 0:
@@ -353,6 +361,8 @@ def train():
         logger.info(f'{output_to_rouge[0]}')
         logger.info('Ground truth:')
         logger.info(f'{summary_to_rouge[0]}')
+
+        logger.info(f'Recursion error count at {recursion_count}.')
 
         os.makedirs(args.save_model_to, exist_ok=True)
         if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model')):
