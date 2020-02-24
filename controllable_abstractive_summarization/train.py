@@ -24,6 +24,7 @@ N_LAYERS = 8 # from paper
 KERNEL_SIZE = 3 # from paper
 DROPOUT_PROB = 0.2 # from paper 
 NO_LEN_TOKENS = 10
+BATCH_SIZE = 32
 
 
 
@@ -132,7 +133,7 @@ def train():
     
     logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
     
-    train_iter = BucketIterator(dataset=train_data, batch_size=32, 
+    train_iter = BucketIterator(dataset=train_data, batch_size=args.batch_size, 
             sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=True)
 
     val_iter = BucketIterator(dataset=val_data, batch_size=256, 
@@ -301,7 +302,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--n_epochs', type=int, default=10,
                         help='number of epochs')
-    parser.add_argument('--batch_size', type=int, default=20000,
+    parser.add_argument('--batch_size', type=int, default=BATCH_SIZE,
                         help='batch size')
     parser.add_argument('--emb_dim', type=int, default=EMB_DIM,
                         help='size of embedding layer')
