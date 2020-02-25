@@ -184,15 +184,9 @@ def train():
     sm_all_tokens = 0
     st_pads = 0
     sm_pads = 0
-    more1500 = 0
-    more2000 = 0
+
     for batch in train_iter:
         stories_len.append(batch.stories.shape[1])
-        if batch.stories.shape[1] > 1500:
-            more1500 +=1
-            if batch.stories.shape[1] > 2000:
-                more2000 += 1
-
         summaries_len.append(batch.summary.shape[1])
         if args.count_pads:
             st_all_tokens += batch.stories.shape[0] * batch.stories.shape[1] 
@@ -204,13 +198,13 @@ def train():
         logger.info(f'In stories, pads are {100*st_pads/st_all_tokens} of all tokens.')
         logger.info(f'In summaries, pads are {100*sm_pads/sm_all_tokens} of all tokens.')
     logger.info(f'Maximum length of article: {max(stories_len)}.')
+    logger.info(stories_len.sort(reverse=True)[0:5])
     logger.info(f'Maximum length of summary: {max(summaries_len)}.')
-    logger.info(f'{more1500} articles of length > 1500.')
-    logger.info(f'{more2000} articles of length > 2000.')
     max_len = max([max(stories_len), max(summaries_len)])
 
     if max_len > 1000:
         sys.setrecursionlimit(max_len + 10)
+        max_len = 1000
     else:
         sys.setrecursionlimit(1500)
     
@@ -265,6 +259,8 @@ def train():
         start = time.time()
         logger.info(f'Training, epoch {epoch}.')
         for no, batch in enumerate(train_iter):
+            if batch.stories.shape > max_len:
+                continue
             batch_count += 1
 
             story, summary = batch.stories, batch.summary
