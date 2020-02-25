@@ -203,8 +203,8 @@ def train():
     if args.count_pads:
         logger.info(f'In stories, pads are {100*st_pads/st_all_tokens} of all tokens.')
         logger.info(f'In summaries, pads are {100*sm_pads/sm_all_tokens} of all tokens.')
-    logger.info(f'Maximum length of article: {max(stories_len).}')
-    logger.info(f'Maximum length of summary: {max(summaries_len).}')
+    logger.info(f'Maximum length of article: {max(stories_len)}.')
+    logger.info(f'Maximum length of summary: {max(summaries_len)}.')
     logger.info(f'{more1500} articles of length > 1500.')
     logger.info(f'{more2000} articles of length > 2000.')
     max_len = max([max(stories_len), max(summaries_len)])
