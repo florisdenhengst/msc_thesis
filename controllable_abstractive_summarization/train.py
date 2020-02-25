@@ -260,7 +260,7 @@ def train():
         start = time.time()
         logger.info(f'Training, epoch {epoch}.')
         for no, batch in enumerate(train_iter):
-            if batch.stories.shape > max_len:
+            if batch.stories.shape[1] > max_len:
                 continue
             batch_count += 1
 
