@@ -221,7 +221,7 @@ def train():
     
     rouge = Rouge()
     if val_iter is not None:
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
     else:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
     
@@ -249,6 +249,9 @@ def train():
         val_batch_count = 0
 
         model.train()
+        
+    
+        start = time.time()
         logger.info(f'Training, epoch {epoch}.')
         for no, batch in enumerate(train_iter):
             batch_count += 1
@@ -341,7 +344,7 @@ def train():
                     
                     val_loss = crossentropy(output, summary.to(device))
                     val_epoch_loss += val_loss.item()
-                scheduler.step(val_epoch_loss)
+                scheduler.step(val_epoch_loss / val_batch_count)
                     
                     
                     
@@ -350,7 +353,7 @@ def train():
         
         logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
         rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
-        val_rouge_scores = {key: {metric: float(val_rouge_scores[key][metric]/batch_count) for metric in val_rouge_scores[key].keys()} for key in val_rouge_scores.keys()}
+        val_rouge_scores = {key: {metric: float(val_rouge_scores[key][metric]/val_batch_count) for metric in val_rouge_scores[key].keys()} for key in val_rouge_scores.keys()}
         metrics['val_loss'].append(val_epoch_loss / val_batch_count)
         metrics['val_rouge'].append(val_rouge_scores)
         
@@ -371,6 +374,8 @@ def train():
         logger.info(f'Saving model at epoch {epoch}.')
         torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
 
+        end = time.time()
+        logger.info(f'Epoch {epoch} took {end-start} seconds.')
 
 
 

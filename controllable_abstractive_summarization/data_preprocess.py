@@ -278,7 +278,6 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
     tmp_name = os.path.join(data_path, 'tmp.csv')
     csv_name = os.path.join(data_path, '_'.join(sources) + '.csv')
     lengths = []
-    p = re.compile('@@@ enti@@ ty@@ ')
 
     with open(tmp_name, 'w') as tmp_file:
     
@@ -286,15 +285,24 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
         writer = csv.DictWriter(tmp_file, fieldnames=processed_data.keys())
         for no, sample in enumerate(dataset):
             
-            sample['stories'] = p.sub('@entity', bpencoder.encode(sample['stories']))
-            sample['summary'] = p.sub('@entity', bpencoder.encode(sample['summary']))
+            def repl(match):
+                return match.group(0).replace('@@ ', '')
+            sample['stories'] = re.sub('@@@ enti@@ ty@@ ([\d+@@ ]+)', repl, bpencoder.encode(sample['stories']))
+            sample['summary'] = re.sub('@@@ enti@@ ty@@ ([\d+@@ ]+)', repl, bpencoder.encode(sample['summary']))
 
             lengths.append(sample['length_tokens'])
+            # entities_in_story = re.findall('@entity[\d+ ]+', sample['stories'])
+            # entities_in_summary = set(re.findall('@entity[\d+ ]+', sample['summary']))
+            # entities_in_story = set(re.findall('@entity\d+', sample['stories']))
+            # deviations = sum([len(re.findall('\s', ent_sample)) > 1 for ent_sample in entities_in_story]) + sum([len(re.findall('\s', ent_sample)) > 1 for ent_sample in entities_in_summary])
+            # deviations = 1 if entities_in_story!=set(sample['entities'].keys())  else 0 
+            # failed_entities += deviations
+
 
             writer.writerow(sample)
             if no % 500 == 0 and no != 0:
                 print(f'Progress: {no}/{len(dataset)} processed.')
-                if no_samples is not None and no % no_samples == 0:
+                if no_samples is not 0 and no % no_samples == 0:
                     break
     bins = equal_bin(np.asarray(lengths), 10)
     len_hist = np.histogram(lengths, 10)
@@ -303,6 +311,10 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
         print(f'Modifying lengths and writing to {csv_name}...')
         reader = csv.DictReader(tmp_file, fieldnames=processed_data.keys())
         writer = csv.DictWriter(csv_file, fieldnames=processed_data.keys())
+        # for no, row in enumerate(reader):
+            # lengths.append(int(row['length_tokens']))
+        bins = equal_bin(np.asarray(lengths), 10)
+        len_hist = np.histogram(lengths, 10)
         for no, row in enumerate(reader):
             row['length_tokens'] = bins[no] + 1
             writer.writerow(row)
@@ -326,6 +338,8 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
     plt.xlabel('length in tokens')
     plt.ylabel('count in tokens')
     plt.savefig('summary_length_hist.png')
+
+    # print(f'FAILED ENTITIES: {failed_entities}')
 
 def equal_bin(N, m):
     sep = (N.size/float(m))*np.arange(1,m+1)
