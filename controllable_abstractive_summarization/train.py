@@ -296,10 +296,12 @@ def train():
             optimizer.step()
             epoch_loss += loss.item()
             no_samples += len(batch.stories)
-            if no % 10 == 0 and no != 0:
+            if no % 500 == 0 and no != 0:
                 logger.info(f'Batch {no}, processed {no_samples} stories.')
                 logger.info(f'Average loss: {epoch_loss / no}.')
                 logger.info(f'Latest ROUGE: {temp_scores}.')
+                end = time.time()
+                logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
                 # logger.info('Output sample:')
                 # logger.info(f'{output_to_rouge[0]}')
                 # logger.info('Ground truth:')

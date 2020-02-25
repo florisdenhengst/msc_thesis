@@ -1,5 +1,8 @@
 # coding=utf-8
 # coding: utf-8
+import logging
+import coloredlogs
+
 import argparse
 import os
 import csv
@@ -16,7 +19,7 @@ import pandas as pd
 import torchtext.data as torchdata
 from torchtext.data import Iterator
 from torch.utils.data import Dataset
-# print(sys.getdefaultencoding())
+# logger.info(sys.getdefaultencoding())
 
 if sys.version_info < (3, 0):
     sys.stderr = codecs.getwriter('UTF-8')(sys.stderr)
@@ -47,6 +50,9 @@ inspired by https://github.com/deepmind/rc-data/
 
 
 global max_src_in_batch, max_tgt_in_batch
+logger = logging.getLogger('Training log')
+coloredlogs.install(logger=logger, level='DEBUG', fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 
 def batch_size_fn(new, count, sofar):
     "Keep augmenting batch and calculate total number of tokens + padding."
@@ -93,19 +99,21 @@ class BPEncoder():
 class CNNDM(Dataset):
     def __init__(self, data_path, cut_off_length=None, sources=['cnn', 'dailymail']):
         super(CNNDM).__init__()
-        # print(os.path.join(data_path, '/cnn/stories/'))
-        # print(os.path.join('.', '/cnn/stories/'))
+        # logger.info(os.path.join(data_path, '/cnn/stories/'))
+        # logger.info(os.path.join('.', '/cnn/stories/'))
 
         self.cut_off_length = cut_off_length
         self.data_path = data_path
-        spacy_en = spacy.load("en", disable=["tagger", "parser", "ner"])
-        self.tokenizer = lambda s: [tok.text for tok in spacy_en.tokenizer(s)]
+        # spacy_en = spacy.load("en", disable=["tagger", "parser", "ner"])
+        # self.tokenizer = lambda s: [tok.text for tok in spacy_en.tokenizer(s)]
 
         self.cnn_stories = os.listdir(os.path.join(data_path, 'cnn/stories/'))
         self.dm_stories = os.listdir(os.path.join(data_path, 'dailymail/stories'))
         
         self.stories = []
         self.sources = []
+        self.max_sum_length = 0
+
         if 'cnn' in sources:
             self.stories += self.cnn_stories 
             self.sources += ['cnn' for i in range(len(self.cnn_stories))]
@@ -122,11 +130,15 @@ class CNNDM(Dataset):
     def __getitem__(self, idx):
 
         text, tokenized = self.tokenize(self.stories[idx], self.sources[idx])
-        content, summary, anonymized = self.anonymize(tokenized, self.stories[idx], self.sources[idx])
-        no_sents, no_tokens = self.quantize(summary)
-        item = {'id': self.stories[idx].split('.')[0], 'stories': content, 'length_tokens': no_tokens, 
+        content, _, anonymized, summary, sum_len_before = self.anonymize(tokenized, self.stories[idx], self.sources[idx])
+        if sum_len_before > self.max_sum_length:
+            self.max_sum_length = sum_len_before
+            if self.max_sum_length > 400:
+                logger.info(f'Longest summary: {self.max_sum_length} tokens.')
+        no_sents, sum_len_after = self.quantize(summary)
+        item = {'id': self.stories[idx].split('.')[0], 'stories': content, 'length_tokens': sum_len_after, 
                         'length_sentences': no_sents, 'source': self.sources[idx], 'entities': anonymized, 
-                        'summary': '. '.join(summary)}
+                        'summary': summary}
         return item
 
     def loadTokenMapping(self, filename):
@@ -248,15 +260,16 @@ class CNNDM(Dataset):
 
         content = ' '.join(new_tokens[0:self.cut_off_length])        
         highlights = ' '.join(new_tokens).split('@ highlight')[1:]
+        summary = ' '.join(highlights).split(' ')
 
-        return content, highlights, anonymization_info
+
+        return content, highlights, anonymization_info, ' '.join(summary[0:self.cut_off_length]), len(summary) 
 
 
     def quantize(self, summary):
-
-        sents = len(summary)
-        
-        tokens = len(self.tokenizer('. '.join(summary)))
+            
+        sents = len(summary.split('.'))
+        tokens = len(summary.split(' '))
 
         return sents, tokens
 
@@ -264,13 +277,13 @@ class CNNDM(Dataset):
 
 def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources=['cnn', 'dailymail'], no_samples=None, cut_off_length=None):
     
-    print(f'Loading data from {sources} and BPE codes...', end='')
+    logger.info(f'Loading data from {sources} and BPE codes...')
 
     dataset = CNNDM(data_path, cut_off_length, sources)
     with open(os.path.join(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
         bpencoder = BPEncoder(codes)
     
-    print('...done.')
+    logger.info('...done.')
 
     processed_data = {'id': [], 'stories':[], 'length_tokens': [], 
                         'length_sentences': [], 'source': [], 'entities': [], 'summary': []}
@@ -281,7 +294,7 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
 
     with open(tmp_name, 'w') as tmp_file:
     
-        print(f'Writing to {tmp_name}, and byte pair encoding...')
+        logger.info(f'Writing to {tmp_name}, and byte pair encoding...')
         writer = csv.DictWriter(tmp_file, fieldnames=processed_data.keys())
         for no, sample in enumerate(dataset):
             
@@ -300,15 +313,21 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
 
 
             writer.writerow(sample)
-            if no % 500 == 0 and no != 0:
-                print(f'Progress: {no}/{len(dataset)} processed.')
-                if no_samples is not 0 and no % no_samples == 0:
-                    break
+            if no % 5000 == 0 and no != 0:
+                logger.info(f'Progress: {no}/{len(dataset)} processed.')
+            if no_samples is not 0 and no % no_samples == 0 and no != 0:
+                break
     bins = equal_bin(np.asarray(lengths), 10)
     len_hist = np.histogram(lengths, 10)
+    logger.info(f'Maximum summary length is {dataset.max_sum_length}.')
+    logger.info(f'Minimum summary length is {min(lengths)}.')
+    logger.info(f'Min summary length after procecssing is {len_hist[1][0]}.')
+    logger.info(f'{len_hist[0][0]} summaries with min length.')
+    logger.info(f'Max summary length after procecssing is {len_hist[1][9]}.')
+    logger.info(f'{len_hist[0][9]} summaries with max length.')
 
     with open(tmp_name, 'r') as tmp_file, open(csv_name, 'w') as csv_file:
-        print(f'Modifying lengths and writing to {csv_name}...')
+        logger.info(f'Modifying lengths and writing to {csv_name}...')
         reader = csv.DictReader(tmp_file, fieldnames=processed_data.keys())
         writer = csv.DictWriter(csv_file, fieldnames=processed_data.keys())
         # for no, row in enumerate(reader):
@@ -319,16 +338,14 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
             row['length_tokens'] = bins[no] + 1
             writer.writerow(row)
 
-    print(f'Removing {tmp_name}...')    
+    logger.info(f'Removing {tmp_name}...')    
     os.remove(tmp_name)
-    print('...done.')
+    logger.info('...done.')
     
     unique, counts = np.unique(bins, return_counts=True)
-    print('Confirming that bins are equal size: ')
-    print(np.asarray((unique, counts)).T)
+    logger.info('Confirming that bins are equal size: ')
+    logger.info(np.asarray((unique, counts)).T)
 
-    print(f'Min summary length is {len_hist[1][0]}.')
-    print(f'{len_hist[0][0]} summaries with min length.')
     
     len_mean = sum(lengths)/len(lengths)
     min_ylim, max_ylim = plt.ylim()
@@ -339,7 +356,7 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
     plt.ylabel('count in tokens')
     plt.savefig('summary_length_hist.png')
 
-    # print(f'FAILED ENTITIES: {failed_entities}')
+    # logger.info(f'FAILED ENTITIES: {failed_entities}')
 
 def equal_bin(N, m):
     sep = (N.size/float(m))*np.arange(1,m+1)
@@ -378,22 +395,22 @@ if __name__ == '__main__':
     #                 ('length_sentences', num_field), ('source', txt_nonseq_field), 
     #                 ('entities', None), ('summary', txt_field)]
     
-    # print('Started loading data...', end='')
+    # logger.info('Started loading data...')
 
     # start = time.time()
     # dataset = TabularDataset(path='./cnn.csv', format='csv', skip_header=True, fields=train_fields)
     # end = time.time()
     
-    # print(f'finished in {end-start} seconds.')
+    # logger.info(f'finished in {end-start} seconds.')
     
-    # print('Started building vocabs...', end='')
+    # logger.info('Started building vocabs...')
     
     # start = time.time()
     # txt_field.build_vocab(dataset)
     # txt_nonseq_field.build_vocab(dataset)
     # end = time.time()
     
-    # print(f'finished in {end-start} seconds.')
+    # logger.info(f'finished in {end-start} seconds.')
 
     # # train_iter = BucketIterator(dataset, batch_size=32, sort_key=lambda x: len(x.stories), shuffle=True)
     # # train_iter3 = BucketIterator(dataset, batch_size=16, sort_key=lambda x: len(x.stories), shuffle=True)
@@ -402,17 +419,17 @@ if __name__ == '__main__':
     #                     sort_key= lambda x:(len(x.stories), len(x.summary)),
     #                     batch_size_fn=batch_size_fn, train=True, shuffle=True)
 
-    # # print([txt_field.vocab.itos[ind] for ind in batch.stories[0]])
+    # # logger.info([txt_field.vocab.itos[ind] for ind in batch.stories[0]])
     
-    # # print(batch.length_tokens)
-    # # print([txt_field.vocab.itos[ind] for ind in batch.summary[0]])
+    # # logger.info(batch.length_tokens)
+    # # logger.info([txt_field.vocab.itos[ind] for ind in batch.summary[0]])
     # pads = 0
     # symbs = 0
 
     # for no, batch in enumerate(train_iter):
-    #     print(f'stories in batch: {len(batch.stories)}')
-    #     print(f'story length: {len(batch.stories[0])}')
-    #     print(f'story length: {len(batch.stories[1])}')        
+    #     logger.info(f'stories in batch: {len(batch.stories)}')
+    #     logger.info(f'story length: {len(batch.stories[0])}')
+    #     logger.info(f'story length: {len(batch.stories[1])}')        
     #     if no == 20: 
     #         break
     #     for story in batch.stories:
@@ -424,15 +441,15 @@ if __name__ == '__main__':
     #             else:                
     #                 symbs += 1
             
-    # print(f'{symbs} tokens, out of which {100*pads/(pads+symbs)} are pads.')
+    # logger.info(f'{symbs} tokens, out of which {100*pads/(pads+symbs)} are pads.')
     # pads = 0
     # symbs = 0
 
     # for no, batch in enumerate(train_iter2):
-    #     # print([txt_field.vocab.itos[ind] for ind in batch.stories[0]])
-    #     print(f'stories in batch: {len(batch.stories)}')
-    #     print(f'story length: {len(batch.stories[0])}')
-    #     print(f'story length: {len(batch.stories[1])}')
+    #     # logger.info([txt_field.vocab.itos[ind] for ind in batch.stories[0]])
+    #     logger.info(f'stories in batch: {len(batch.stories)}')
+    #     logger.info(f'story length: {len(batch.stories[0])}')
+    #     logger.info(f'story length: {len(batch.stories[1])}')
     #     if no == 20: 
     #         break
     #     for story in batch.stories:
@@ -445,7 +462,7 @@ if __name__ == '__main__':
     #             else:                
     #                 symbs += 1
             
-    # print(f'{symbs} tokens, out of which {100*pads/(pads+symbs)} are pads.')
+    # logger.info(f'{symbs} tokens, out of which {100*pads/(pads+symbs)} are pads.')
     # # pads = 0
     # # symbs = 0
 
@@ -461,7 +478,7 @@ if __name__ == '__main__':
     # #             else:                
     # #                 symbs += 1
             
-    # # print(f'{symbs} tokens, out of which {100*pads/(pads+symbs)} are pads.')
+    # # logger.info(f'{symbs} tokens, out of which {100*pads/(pads+symbs)} are pads.')
     # # pads = 0
     # # symbs = 0
 
@@ -477,17 +494,17 @@ if __name__ == '__main__':
     # #             else:                
     # #                 symbs += 1
             
-    # # print(f'{symbs} tokens, out of which {100*pads/(pads+symbs)} are pads.')
+    # # logger.info(f'{symbs} tokens, out of which {100*pads/(pads+symbs)} are pads.')
     
     # # data_path = os.getcwd()
     # # dataset = CNNDM(data_path, src_field)
     # # train_iter = BucketIterator(dataset=dataset, batch_size=32, sort_key=lambda x: x.no_sents, shuffle=True)
-    # # print('data initialized') 
-    # # print(next(iter(train_iter)))
+    # # logger.info('data initialized') 
+    # # logger.info(next(iter(train_iter)))
     # # for no, i in enumerate(train_iter):
-    # #     print('started iterating')
+    # #     logger.info('started iterating')
     # #     idx, source, content, summary, anonymized, no_tokens, no_sents = batch 
-    # #     print(summary)
+    # #     logger.info(summary)
     # #     if no == 5:
     #         break
 
