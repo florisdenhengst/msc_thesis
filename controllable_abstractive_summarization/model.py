@@ -244,12 +244,13 @@ class ConvDecoder(nn.Module):
                                     encoder_conved, 
                                     encoder_combined,
                                     x, self.scale)                              #attention = [batch size, trg len, src len]
-            
             if self.self_attention is not None:
                 _, conved = self.self_attention(conved)
+                conved = conved.permute(0, 2, 1)
+                
 
             #apply residual connection
-            conved = (conved.permute(0, 2, 1) + conv_input) * self.scale             #conved = [batch size, hid dim, trg len]
+            conved = (conved + conv_input) * self.scale             #conved = [batch size, hid dim, trg len]
             
             #set conv_input to conved for next loop iteration
             conv_input = conved
