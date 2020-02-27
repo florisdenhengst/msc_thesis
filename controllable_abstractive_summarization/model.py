@@ -191,7 +191,10 @@ class ConvDecoder(nn.Module):
 
         
         self.attention = Attention(hid_dim, emb_dim)
-        self.self_attention = SelfAttention(hid_dim, emb_dim)
+        if self_attention_heads != 0:
+            self.self_attention = SelfAttention(hid_dim, emb_dim)
+        else:
+            self.self_attention = None
 
         self.fc_out = nn.Linear(emb_dim, output_dim)
         
@@ -237,12 +240,13 @@ class ConvDecoder(nn.Module):
             conved = F.glu(conved, dim = 1)                         #conved = [batch size, hid dim, trg len]
             
             #calculate attention
-            attention, conved = self.attention(conved,
+            _, conved = self.attention(conved,
                                     encoder_conved, 
                                     encoder_combined,
                                     x, self.scale)                              #attention = [batch size, trg len, src len]
             
-            _, conved = self.self_attention(conved)
+            if self.self_attention is not None:
+                _, conved = self.self_attention(conved)
 
             #apply residual connection
             conved = (conved.permute(0, 2, 1) + conv_input) * self.scale             #conved = [batch size, hid dim, trg len]
@@ -254,7 +258,7 @@ class ConvDecoder(nn.Module):
             
         output = self.fc_out(self.dropout(conved))                  #output = [batch size, trg len, output dim]
             
-        return output, attention
+        return output, None #None used to be attention
 
 class Attention(nn.Module):
     def __init__(self, out_channels, emb_dim, self_attention=False):

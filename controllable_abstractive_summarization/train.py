@@ -206,7 +206,7 @@ def train():
         model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
                                         hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
                                         dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
-                                        share_weights=args.share_weights, max_length=max_len).to(device)
+                                        share_weights=args.share_weights, max_length=max_len, self_attention=int(args.self_attention)).to(device)
 
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
         no_params = sum([np.prod(p.size()) for p in model_parameters])
@@ -385,7 +385,7 @@ def train():
         model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
                                         hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
                                         dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
-                                        share_weights=args.share_weights, max_length=max_len).to(device)
+                                        share_weights=args.share_weights, max_length=max_len, self_attention=int(args.self_attention)).to(device)
 
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
         no_params = sum([np.prod(p.size()) for p in model_parameters])
@@ -480,6 +480,8 @@ if __name__ == '__main__':
                         help='Number of bins for summary lengths in terms of tokens.')
     parser.add_argument('--synth', action='store_true',
                         help='Whether to use on synthetic data')
+    parser.add_argument('--self_attention', action='store_true',
+                        help='Whether to use self_attention')
 
     args = parser.parse_args()
 
