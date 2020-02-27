@@ -399,7 +399,7 @@ def train():
             optimizer.zero_grad()
             # print(story.shape)
             # print(summary_to_pass.shape)
-            output, _ = model(story, summary_to_pass)
+            output, _ = model(story.to(device), summary_to_pass.to(device))
             
             output_to_rouge = [[ind for ind in torch.argmax(summ, dim=1)] for summ in output]
             # logger.info(output.shape)
@@ -409,7 +409,7 @@ def train():
             # logger.info(summary_to_pass.shape)
             summary = batch['output'][:,1:].contiguous().view(-1)
             # logger.info(summary.shape)
-            loss = crossentropy(output, summary)
+            loss = crossentropy(output, summary.to(device))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
             optimizer.step()
