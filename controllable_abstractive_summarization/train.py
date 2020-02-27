@@ -376,7 +376,7 @@ def train():
             end = time.time()
             logger.info(f'Epoch {epoch} took {end-start} seconds.')
     else:
-        data = Synthetic(batch_size=32)
+        data = Synthetic(batch_size=32, vocab_size=100, max_in=100, max_out=20, min_in=20, min_out=5)
         input_dim = data.vocab_size + 10    # control length codes
         output_dim = data.vocab_size + 10   # control length codes
         max_len = max(data.max_in_len, data.max_out_len) + 2
@@ -392,6 +392,7 @@ def train():
         logger.info(f'{no_params} trainable parameters in the model.')
         crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx)
         optimizer = torch.optim.SGD(model.parameters(), lr=0.2, momentum=0.99, nesterov=True)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
         epoch_loss = 0
         for n, batch in enumerate(data):
             story = batch['input']
@@ -418,8 +419,11 @@ def train():
             if n % 50 == 0:
                 logger.info(f'Batch {n+1}, loss: {epoch_loss / (n+1)}.')
                 logger.info
+                logger.info(story[0])
                 logger.info(summary_to_pass[0])
                 logger.info(output_to_rouge[0])
+            if n % 1000 == 0 and n != 0:
+                scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
 
 
 
