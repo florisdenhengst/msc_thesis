@@ -402,20 +402,20 @@ def train():
             output, _ = model(story, summary_to_pass)
             
             output_to_rouge = [[ind for ind in torch.argmax(summ, dim=1)] for summ in output]
-            logger.info(output.shape)
+            # logger.info(output.shape)
             output = output.contiguous().view(-1, output.shape[-1])
-            logger.info(output.shape)
-            logger.info(batch['output'].shape)
-            logger.info(summary_to_pass.shape)
+            # logger.info(output.shape)
+            # logger.info(batch['output'].shape)
+            # logger.info(summary_to_pass.shape)
             summary = batch['output'][:,1:].contiguous().view(-1)
-            logger.info(summary.shape)
+            # logger.info(summary.shape)
             loss = crossentropy(output, summary)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
             optimizer.step()
             epoch_loss += loss.item()
 
-            if n % 1 == 0:
+            if n % 50 == 0:
                 logger.info(f'Batch {n+1}, loss: {epoch_loss / (n+1)}.')
                 logger.info
                 logger.info(summary_to_pass[0])
