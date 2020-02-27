@@ -21,7 +21,7 @@ import torch.nn.functional as F
 class ControllableSummarizer(nn.Module):
 
     def __init__(self, input_dim, output_dim, emb_dim, hid_dim, n_layers, 
-                        kernel_size, dropout_prob, device, padding_idx, share_weights=False, max_length=1500):
+                        kernel_size, dropout_prob, device, padding_idx, share_weights=False, max_length=1500, self_attention=1):
         super(ControllableSummarizer, self).__init__()
         if share_weights:
             self.tok_embedding = nn.Embedding(input_dim, emb_dim)
@@ -39,7 +39,7 @@ class ControllableSummarizer(nn.Module):
             self.hid2emb = None
 
         self.encoder = ConvEncoder(input_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
-        self.decoder = ConvDecoder(output_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, 1, max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
+        self.decoder = ConvDecoder(output_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, self_attention, max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
 
     def forward(self, src_tokens, trg_tokens):
         # print(src_tokens.shape)
