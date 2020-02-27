@@ -402,7 +402,7 @@ def train():
             # print(summary_to_pass.shape)
             output, _ = model(story.to(device), summary_to_pass.to(device))
             
-            output_to_rouge = [[ind for ind in torch.argmax(summ, dim=1)] for summ in output]
+            output_to_rouge = [[int(ind) for ind in torch.argmax(summ, dim=1)] for summ in output]
             # logger.info(output.shape)
             output = output.contiguous().view(-1, output.shape[-1])
             # logger.info(output.shape)
