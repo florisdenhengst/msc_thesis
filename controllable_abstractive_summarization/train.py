@@ -295,6 +295,8 @@ def train():
                 no_samples += len(batch.stories)
                 if no % 500 == 0 and no != 0:
                     logger.info(f'Batch {no}, processed {no_samples} stories.')
+                    print(summary_to_rouge[0])
+                    print(output_to_rouge[0])
                     logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
                     end = time.time()
