@@ -188,20 +188,22 @@ class ConvDecoder(nn.Module):
 
         self.emb2hid = nn.Linear(emb_dim, hid_dim)
         self.dropout = nn.Dropout(dropout_prob)
-
-        
-        self.attention = Attention(hid_dim, emb_dim)
-        if self_attention_heads != 0:
-            self.self_attention = SelfAttention(hid_dim, emb_dim)
-        else:
-            self.self_attention = None
-
-        self.fc_out = nn.Linear(emb_dim, output_dim)
-        
         self.convs = nn.ModuleList([nn.Conv1d(in_channels = hid_dim, 
                                               out_channels = 2 * hid_dim, 
                                               kernel_size = kernel_size)
-                                    for _ in range(n_layers)])
+                                    for i in range(n_layers)])
+        
+        
+        if self_attention_heads != 0:
+            self.attns = nn.ModuleList([Attention(hid_dim, emb_dim) if i % 2 == 0 else SelfAttention(hid_dim, emb_dim)
+                                    for i in range(n_layers)])
+        else:
+            self.attns = nn.ModuleList([Attention(hid_dim, emb_dim) if i % 2 == 0 else None
+                                    for i in range(n_layers)])
+
+        self.fc_out = nn.Linear(emb_dim, output_dim)
+        
+        
         
     def forward(self, trg_tokens, encoder_conved, encoder_combined):
         
@@ -223,6 +225,7 @@ class ConvDecoder(nn.Module):
         conv_input = conv_input.permute(0, 2, 1)                    #conv_input = [batch size, hid dim, trg len]
         
         for i, conv in enumerate(self.convs):
+            attn = self.attns[i]
             #apply dropout
             conv_input = self.dropout(conv_input)
         
@@ -244,19 +247,20 @@ class ConvDecoder(nn.Module):
             # print(f'conved, shape {conved.shape}')
             # print(f'encoder_conved, shape {encoder_conved.shape}')
             # print(f'encoder_combined, shape {encoder_combined.shape}')
-            _, conved = self.attention(conved,
+            # print('after attention')
+            # print(f'conved shape {conved.shape}')
+            if i % 2 == 0:
+                _, conved = attn(conved,
                                     encoder_conved, 
                                     encoder_combined,
                                     x, self.scale)                              #attention = [batch size, trg len, src len]
-            # print('after attention')
-            # print(f'conved shape {conved.shape}')
-            if self.self_attention is not None:
-                _, conved = self.self_attention(conved)
-                # print(f'after self-attention')
-                # print(f'conved shape {conved.shape}')
-                conved = conved.permute(0, 2, 1)
+            
+            else:
+                if attn is not None:
+                    _, conved = attn(conved)
+                conved = conved.permute(0, 2, 1) * self.scale
                 
-
+                
             #apply residual connection
             conved = (conved + conv_input) * self.scale             #conved = [batch size, hid dim, trg len]
             
@@ -275,7 +279,7 @@ class Attention(nn.Module):
         
         if not self_attention:
             self.attn_hid2emb = nn.Linear(out_channels, emb_dim)
-        self.attn_emb2hid = nn.Linear(emb_dim, out_channels)
+            self.attn_emb2hid = nn.Linear(emb_dim, out_channels)
 
     def forward(self, conved, encoder_conved, encoder_combined, x=None, scale=None):
         
