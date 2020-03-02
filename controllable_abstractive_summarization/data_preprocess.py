@@ -113,6 +113,8 @@ class CNNDM(Dataset):
         self.stories = []
         self.sources = []
         self.max_sum_length = 0
+        self.cut_stories = 0
+        self.cut_summaries = 0
 
         if 'cnn' in sources:
             self.stories += self.cnn_stories 
@@ -130,7 +132,7 @@ class CNNDM(Dataset):
     def __getitem__(self, idx):
 
         text, tokenized = self.tokenize(self.stories[idx], self.sources[idx])
-        content, _, anonymized, summary, sum_len_before = self.anonymize(tokenized, self.stories[idx], self.sources[idx])
+        content, summary, anonymized, sum_len_before = self.anonymize(tokenized, self.stories[idx], self.sources[idx])
         if sum_len_before > self.max_sum_length:
             self.max_sum_length = sum_len_before
             if self.max_sum_length > 400:
@@ -257,13 +259,22 @@ class CNNDM(Dataset):
                 new_tokens.append(tokenized_story[i])
 
                 i += 1
+        new_tokens = ' '.join(new_tokens).split('@ highlight')
+        
+        content = new_tokens[0]
+        len_content = len(content.split(' '))
+        if len_content > self.cut_off_length:
+            content = ' '.join(content.split(' ')[0:self.cut_off_length])
+            self.cut_stories += 1
 
-        content = ' '.join(new_tokens[0:self.cut_off_length])        
-        highlights = ' '.join(new_tokens).split('@ highlight')[1:]
-        summary = ' '.join(highlights).split(' ')
+        summary = ' . '.join(new_tokens[1:])
+        len_summary = len(summary.split(' '))
+        if len_summary > self.cut_off_length:
+            
+            summary = ' '.join(summary.split(' ')[0:self.cut_off_length])
+            self.cut_summaries += 1
 
-
-        return content, highlights, anonymization_info, ' '.join(summary[0:self.cut_off_length]), len(summary) 
+        return content, summary, anonymization_info, len_summary
 
 
     def quantize(self, summary):
@@ -299,9 +310,14 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
         for no, sample in enumerate(dataset):
             
             def repl(match):
-                return match.group(0).replace('@@ ', '')
-            sample['stories'] = re.sub('@@@ enti@@ ty@@ ([\d+@@ ]+)', repl, bpencoder.encode(sample['stories']))
-            sample['summary'] = re.sub('@@@ enti@@ ty@@ ([\d+@@ ]+)', repl, bpencoder.encode(sample['summary']))
+                replaced = match.group(0).replace('@@ ', '')
+                return replaced
+
+            pattern = '@{3} enti@{2} ty@{2} (\d+@@ )*\d+(?!@)'
+            original_summary = sample['summary']
+            sample['stories'] = re.sub(pattern, repl, bpencoder.encode(sample['stories']))
+            
+            sample['summary'] = re.sub(pattern, repl, bpencoder.encode(sample['summary']))
 
             lengths.append(sample['length_tokens'])
             # entities_in_story = re.findall('@entity[\d+ ]+', sample['stories'])
@@ -317,6 +333,12 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
                 logger.info(f'Progress: {no}/{len(dataset)} processed.')
             if no_samples is not 0 and no % no_samples == 0 and no != 0:
                 break
+    logger.info(sample['stories'])
+    logger.info(sample['summary'])
+    logger.info(original_summary)
+
+    logger.info(f'There are {dataset.cut_stories} out of {no+1} stories over the cutoff length.')
+    logger.info(f'There are {dataset.cut_summaries} out of {no+1} summaries over the cutoff length.')
     bins = equal_bin(np.asarray(lengths), 10)
     len_hist = np.histogram(lengths, 10)
     logger.info(f'Maximum summary length is {dataset.max_sum_length}.')

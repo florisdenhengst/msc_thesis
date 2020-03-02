@@ -154,8 +154,7 @@ def train():
         logger.info(f'1st train article id is {sample.id}')
         sample = next(iter(val_iter))
         logger.info(f'1st val article id is {sample.id}')
-       
-        
+
         len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
         source_tokens = ['<cnn>', '<dailymail>']
         txt_field = add_tokens_to_vocab(txt_field, len_tokens+source_tokens)
@@ -166,9 +165,9 @@ def train():
         input_dim = len(txt_field.vocab)
         output_dim = len(txt_field.vocab)
         end = time.time()
-        
+
         logger.info(f'finished in {end-start} seconds.')
-        
+
         stories_len = []
         summaries_len = []
         st_all_tokens = 0
@@ -202,7 +201,6 @@ def train():
         logger.info(f'Initializing model with:') 
         logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
 
-
         model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
                                         hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
                                         dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
@@ -213,26 +211,22 @@ def train():
         logger.info(f'{no_params} trainable parameters in the model.')
         crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx)
         optimizer = torch.optim.SGD(model.parameters(), lr=0.2, momentum=0.99, nesterov=True)
-        
+
         rouge = Rouge()
         if val_iter is not None:
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
         else:
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
-        
 
-        
         sent_end_tokens = ['.', '!', '?']
         sent_end_inds = [txt_field.vocab.stoi[token] for token in sent_end_tokens]
-        
+
         epoch = 0
         recursion_count = 0
         metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
-        
-        
+
         logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
 
-        
         while optimizer.param_groups[0]['lr'] > 1e-5:
             epoch += 1
             no_samples = 0
@@ -244,11 +238,12 @@ def train():
             val_batch_count = 0
 
             model.train()
-            
-        
+
+
             start = time.time()
             logger.info(f'Training, epoch {epoch}.')
             for no, batch in enumerate(train_iter):
+                    
                 if batch.stories.shape[1] > max_len:
                     continue
                 batch_count += 1
@@ -257,6 +252,7 @@ def train():
 
                 lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
                 summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
+
                 summary_to_pass = exclude_token(summary, eos_idx)
                 len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
                 src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
@@ -293,10 +289,10 @@ def train():
                 optimizer.step()
                 epoch_loss += loss.item()
                 no_samples += len(batch.stories)
-                if no % 500 == 0 and no != 0:
+                if no % 1 == 0 and no != 0:
                     logger.info(f'Batch {no}, processed {no_samples} stories.')
-                    print(summary_to_rouge[0])
-                    print(output_to_rouge[0])
+                    logger.info(summary_to_rouge[0])
+                    logger.info(output_to_rouge[0])
                     logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
                     end = time.time()

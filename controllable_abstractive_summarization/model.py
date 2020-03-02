@@ -240,12 +240,20 @@ class ConvDecoder(nn.Module):
             conved = F.glu(conved, dim = 1)                         #conved = [batch size, hid dim, trg len]
             
             #calculate attention
+            # print(f'before attention')
+            # print(f'conved, shape {conved.shape}')
+            # print(f'encoder_conved, shape {encoder_conved.shape}')
+            # print(f'encoder_combined, shape {encoder_combined.shape}')
             _, conved = self.attention(conved,
                                     encoder_conved, 
                                     encoder_combined,
                                     x, self.scale)                              #attention = [batch size, trg len, src len]
+            # print('after attention')
+            # print(f'conved shape {conved.shape}')
             if self.self_attention is not None:
                 _, conved = self.self_attention(conved)
+                # print(f'after self-attention')
+                # print(f'conved shape {conved.shape}')
                 conved = conved.permute(0, 2, 1)
                 
 
@@ -282,10 +290,11 @@ class Attention(nn.Module):
             conved_emb = self.attn_hid2emb(conved.permute(0, 2, 1))     #conved_emb = [batch size, trg len, emb dim]
                 
             conved_combined = (conved_emb + x) * scale             #combined = [batch size, trg len, emb dim]
+            encoder_conved = encoder_conved.permute(0, 2, 1)
             
                 
         energy = torch.matmul(conved_combined,
-                        encoder_conved.permute(0, 2, 1))            #energy = [batch size, trg len, src len]
+                        encoder_conved)            #energy = [batch size, trg len, src len]
         
         attention = F.softmax(energy, dim=2)                        #attention = [batch size, trg len, src len]
             
@@ -318,7 +327,9 @@ class SelfAttention(nn.Module):
         self.ln = nn.LayerNorm(out_channels)
 
     def forward(self, x):
+        # print('in self-attention')
         residual = x.permute(0, 2, 1)
+        # print(f'residual, shape {residual.shape}')
         query = self.in_proj_q(residual)
         key = self.in_proj_k(residual)
         value = self.in_proj_v(residual)
