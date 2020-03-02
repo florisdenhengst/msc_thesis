@@ -284,15 +284,19 @@ class Attention(nn.Module):
         #encoder_conved = encoder_combined = [batch size, src len, emb dim]
         
         #permute and convert back to emb dim
+
         if x is None:
             conved_combined = conved
+           
         else:
             conved_emb = self.attn_hid2emb(conved.permute(0, 2, 1))     #conved_emb = [batch size, trg len, emb dim]
-                
+            # print(conved_emb.shape)    
             conved_combined = (conved_emb + x) * scale             #combined = [batch size, trg len, emb dim]
-            encoder_conved = encoder_conved.permute(0, 2, 1)
             
-                
+
+        encoder_conved = encoder_conved.permute(0, 2, 1)    
+        # print(encoder_conved.shape)
+        # print('operations')
         energy = torch.matmul(conved_combined,
                         encoder_conved)            #energy = [batch size, trg len, src len]
         
@@ -301,17 +305,22 @@ class Attention(nn.Module):
         attended_encoding = torch.matmul(attention, 
                         encoder_combined)                           #attended_encoding = [batch size, trg len, emd dim]
         
+        
         #convert from emb dim -> hid dim
-        attended_encoding = self.attn_emb2hid(attended_encoding)    #attended_encoding = [batch size, trg len, hid dim]
+        
+        # print(attended_encoding.shape)
         
         #apply residual connection
         if x is not None:
+            attended_encoding = self.attn_emb2hid(attended_encoding)    #attended_encoding = [batch size, trg len, hid dim]
             attended_combined = (conved + attended_encoding.permute(0, 2, 1)) 
             #attended_combined = [batch size, hid dim, trg len]
+            return attention, attended_combined
         else:
-            attended_combined = attended_encoding
+            attended_encoding
+            return attention, attended_encoding
         
-        return attention, attended_combined
+        
 
 class SelfAttention(nn.Module):
     """
@@ -324,6 +333,7 @@ class SelfAttention(nn.Module):
         self.in_proj_q = nn.Linear(out_channels, embed_dim)
         self.in_proj_k = nn.Linear(out_channels, embed_dim)
         self.in_proj_v = nn.Linear(out_channels, embed_dim)
+        self.s_attn_emb2hid = nn.Linear(embed_dim, out_channels)
         self.ln = nn.LayerNorm(out_channels)
 
     def forward(self, x):
@@ -333,5 +343,6 @@ class SelfAttention(nn.Module):
         query = self.in_proj_q(residual)
         key = self.in_proj_k(residual)
         value = self.in_proj_v(residual)
-        attn, x_attn = self.attention(query, key, value)
+        attn, encoding = self.attention(query, key, value)
+        x_attn = self.s_attn_emb2hid(encoding)
         return attn, self.ln(x_attn + residual)
