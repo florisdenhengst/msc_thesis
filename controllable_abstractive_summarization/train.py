@@ -129,12 +129,12 @@ def train():
         
         logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
         
-        # train_iter = BucketIterator(dataset=train_data, batch_size=args.batch_size, 
-        #         sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=True)
+        train_iter = BucketIterator(dataset=train_data, batch_size=args.batch_size, 
+                sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=True)
         batch_tokens = 800 * args.batch_size
-        train_iter = MyIterator(dataset=train_data, batch_size=batch_tokens, 
-            sort_key= lambda x:(len(x.stories), len(x.summary)),
-            batch_size_fn=batch_size_fn, train=True, shuffle=True)
+        # train_iter = MyIterator(dataset=train_data, batch_size=batch_tokens, 
+            # sort_key= lambda x:(len(x.stories), len(x.summary)),
+            # batch_size_fn=batch_size_fn, train=True, shuffle=True)
 
         val_iter = BucketIterator(dataset=val_data, batch_size=256, 
                 sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
@@ -289,7 +289,7 @@ def train():
                 optimizer.step()
                 epoch_loss += loss.item()
                 no_samples += len(batch.stories)
-                if no % 1 == 0 and no != 0:
+                if no % 500 == 0 and no != 0:
                     logger.info(f'Batch {no}, processed {no_samples} stories.')
                     logger.info(summary_to_rouge[0])
                     logger.info(output_to_rouge[0])
@@ -303,6 +303,13 @@ def train():
                     # logger.info(f'{summary_to_rouge[0]}')
 
             
+            os.makedirs(args.save_model_to, exist_ok=True)
+            if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model')):
+                logger.info('Removing model from previous epoch...')
+                os.remove(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model'))
+            logger.info(f'Saving model at epoch {epoch}.')
+            torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
+
             if val_iter is not None:
                 
                 with model.eval() and torch.no_grad():
@@ -364,12 +371,7 @@ def train():
 
             logger.info(f'Recursion error count at {recursion_count}.')
 
-            os.makedirs(args.save_model_to, exist_ok=True)
-            if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model')):
-                logger.info('Removing model from previous epoch...')
-                os.remove(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model'))
-            logger.info(f'Saving model at epoch {epoch}.')
-            torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
+            
 
             end = time.time()
             logger.info(f'Epoch {epoch} took {end-start} seconds.')
