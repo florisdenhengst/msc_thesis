@@ -11,6 +11,7 @@ import coloredlogs
 import torch.nn as nn
 import numpy as np
 import re
+import pickle
 
 from collections import Counter
 from rouge import Rouge
@@ -136,7 +137,7 @@ def train():
             # sort_key= lambda x:(len(x.stories), len(x.summary)),
             # batch_size_fn=batch_size_fn, train=True, shuffle=True)
 
-        val_iter = BucketIterator(dataset=val_data, batch_size=256, 
+        val_iter = BucketIterator(dataset=val_data, batch_size=args.batch_size, 
                 sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
 
 
@@ -149,6 +150,11 @@ def train():
         start = time.time()
         txt_field.build_vocab(train_data, val_data)
         txt_nonseq_field.build_vocab(train_data, val_data)
+
+        with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'wb') as file:
+            pickle.dump(txt_field.vocab.stoi, file)
+        with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'wb') as file:
+            pickle.dump(txt_field.vocab.itos, file)
 
         sample = next(iter(train_iter))
         logger.info(f'1st train article id is {sample.id}')
@@ -360,9 +366,9 @@ def train():
             val_rouge_scores = {key: {metric: float(val_rouge_scores[key][metric]/val_batch_count) for metric in val_rouge_scores[key].keys()} for key in val_rouge_scores.keys()}
             metrics['val_loss'].append(val_epoch_loss / val_batch_count)
             metrics['val_rouge'].append(val_rouge_scores)
-            
             metrics['train_loss'].append(epoch_loss / batch_count)
             metrics['train_rouge'].append(rouge_scores)
+
             logger.info(metrics)
             logger.info('Output sample:')
             logger.info(f'{output_to_rouge[0]}')
@@ -370,8 +376,8 @@ def train():
             logger.info(f'{summary_to_rouge[0]}')
 
             logger.info(f'Recursion error count at {recursion_count}.')
-
-            
+            with open(os.path.join(args.save_model_to, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
+                pickle.dump(metrics, file)
 
             end = time.time()
             logger.info(f'Epoch {epoch} took {end-start} seconds.')
@@ -425,6 +431,33 @@ def train():
             if n % 1000 == 0 and n != 0:
                 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
 
+def summarize_text(text, field, model, device, bpe_applied=True, desired_length=5, desired_source='cnn'):
+    
+    if not bpe_applied:
+        with open(os.path.join(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
+            bpencoder = BPEncoder(codes)
+
+        def repl(match):
+            replaced = match.group(0).replace('@@ ', '')
+            return replaced
+
+        pattern = '@{3} enti@{2} ty@{2} (\d+@@ )*\d+(?!@)'
+        text = re.sub(pattern, repl, bpencoder.encode(text))
+
+    with model.eval() and torch.no_grad():
+        nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "ner"])
+        text = [tok.lower() for tok in nlp.tokenizer(text)]
+        text = ['<sos>'] + text + ['<eos>']
+        text = torch.tensor([field.vocab.stoi[token] for token in text]).unsqueeze(0).to(device)
+
+        # lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
+        
+        len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(desired_length) + '>']]).unsqueeze(dim=1)
+        src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[desired_source] + '>']]).unsqueeze(dim=1)
+        # ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
+
+        story = torch.cat((len_tensor, src_tensor, story), dim=1) #ent_tensor, len_tensor, src_tensor, story), dim=1)
+        model.inference(story, 'sos', 'eos')
 
 
     
