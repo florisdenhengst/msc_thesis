@@ -191,30 +191,33 @@ def train():
         sm_all_tokens = 0
         st_pads = 0
         sm_pads = 0
-
-        for batch in train_iter:
-            stories_len.append(batch.stories.shape[1])
-            summaries_len.append(batch.summary.shape[1])
+        sys.setrecursionlimit(1500)
+        if not args.test:
+            for batch in train_iter:
+                stories_len.append(batch.stories.shape[1])
+                summaries_len.append(batch.summary.shape[1])
+                if args.count_pads:
+                    st_all_tokens += batch.stories.shape[0] * batch.stories.shape[1] 
+                    sm_all_tokens += batch.summary.shape[0] * batch.summary.shape[1] 
+                    st_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.stories])
+                    sm_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.summary])
             if args.count_pads:
-                st_all_tokens += batch.stories.shape[0] * batch.stories.shape[1] 
-                sm_all_tokens += batch.summary.shape[0] * batch.summary.shape[1] 
-                st_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.stories])
-                sm_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.summary])
+                logger.info(f'In stories, pads are {100*st_pads/st_all_tokens} of all tokens.')
+                logger.info(f'In summaries, pads are {100*sm_pads/sm_all_tokens} of all tokens.')
+        
+            logger.info(f'Maximum length of article: {max(stories_len)}.')
 
-        if args.count_pads:
-            logger.info(f'In stories, pads are {100*st_pads/st_all_tokens} of all tokens.')
-            logger.info(f'In summaries, pads are {100*sm_pads/sm_all_tokens} of all tokens.')
-        logger.info(f'Maximum length of article: {max(stories_len)}.')
-        stories_len.sort(reverse=True)
-        logger.info(stories_len[0:5])
-        logger.info(f'Maximum length of summary: {max(summaries_len)}.')
-        max_len = max([max(stories_len), max(summaries_len)])
+            stories_len.sort(reverse=True)
+            logger.info(stories_len[0:5])
+            logger.info(f'Maximum length of summary: {max(summaries_len)}.')
+            max_len = max([max(stories_len), max(summaries_len)])
 
-        if max_len > 1000:
-            sys.setrecursionlimit(max_len + 10)
+            if max_len > 1000:
+                sys.setrecursionlimit(max_len + 10)
+                max_len = 1000
+        else: 
             max_len = 1000
-        else:
-            sys.setrecursionlimit(1500)
+                
         logger.info(f'Initializing model with:') 
         logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
 
@@ -247,7 +250,7 @@ def train():
         else: 
             metrics = {'test_loss':[], 'test_rouge':[]}
 
-        logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
+        
         if args.test:
             rouge_scores = None
             
@@ -292,11 +295,8 @@ def train():
             rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
             logger.info(f'Test rouge: {rouge_scores}.')
 
-
-
-
-
         else:
+            logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
             while optimizer.param_groups[0]['lr'] > 1e-5:
                 epoch += 1
                 no_samples = 0
