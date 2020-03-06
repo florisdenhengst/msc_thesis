@@ -157,7 +157,10 @@ def train():
                 pickle.dump(txt_field.vocab.stoi, file)
             with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'wb') as file:
                 pickle.dump(txt_field.vocab.itos, file)
-
+            sample = next(iter(train_iter))
+            logger.info(f'1st train article id is {sample.id}')
+            sample = next(iter(val_iter))
+            logger.info(f'1st val article id is {sample.id}')
         else:
             txt_field.build_vocab(test_data)
             txt_nonseq_field.build_vocab(test_data)
@@ -167,10 +170,7 @@ def train():
                 txt_field.vocab.itos = pickle.load(file)
 
 
-        sample = next(iter(train_iter))
-        logger.info(f'1st train article id is {sample.id}')
-        sample = next(iter(val_iter))
-        logger.info(f'1st val article id is {sample.id}')
+        
 
         len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
         source_tokens = ['<cnn>', '<dailymail>']
