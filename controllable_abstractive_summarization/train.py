@@ -159,6 +159,8 @@ def train():
                 pickle.dump(txt_field.vocab.itos, file)
 
         else:
+            txt_field.build_vocab(test_data)
+            txt_nonseq_field.build_vocab(test_data)
             with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'rb') as file:
                 txt_field.vocab.stoi = pickle.load(file)
             with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'rb') as file:
