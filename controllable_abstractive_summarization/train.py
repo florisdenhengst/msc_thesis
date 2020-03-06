@@ -124,23 +124,25 @@ def train():
 
         random.seed(42)
         st = random.getstate()
-        train_data, val_data, _ = TabularDataset(path=csv_path, format='csv', skip_header=True, fields=train_fields).split(split_ratio=[0.922, 0.043, 0.035], random_state=st)
-
-        test_data = []
+        if args.test:
+            _, _, test_data = TabularDataset(path=csv_path, format='csv', skip_header=True, fields=train_fields).split(split_ratio=[0.922, 0.043, 0.035], random_state=st)
+            train_data, val_data = [], []
+            test_iter = BucketIterator(dataset=test_data, batch_size=args.batch_size, 
+                sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
+        else:
+            train_data, val_data, _ = TabularDataset(path=csv_path, format='csv', skip_header=True, fields=train_fields).split(split_ratio=[0.922, 0.043, 0.035], random_state=st)
+            test_data = []
+            train_iter = BucketIterator(dataset=train_data, batch_size=args.batch_size, 
+                sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=True)
+            val_iter = BucketIterator(dataset=val_data, batch_size=args.batch_size, 
+                sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
         
         logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
         
-        train_iter = BucketIterator(dataset=train_data, batch_size=args.batch_size, 
-                sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=True)
-        batch_tokens = 800 * args.batch_size
+        # batch_tokens = 800 * args.batch_size
         # train_iter = MyIterator(dataset=train_data, batch_size=batch_tokens, 
             # sort_key= lambda x:(len(x.stories), len(x.summary)),
             # batch_size_fn=batch_size_fn, train=True, shuffle=True)
-
-        val_iter = BucketIterator(dataset=val_data, batch_size=args.batch_size, 
-                sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
-
-
         end = time.time()
         
         logger.info(f'finished in {end-start} seconds.')
@@ -148,13 +150,20 @@ def train():
         logger.info('Started building vocabs...')
         
         start = time.time()
-        txt_field.build_vocab(train_data, val_data)
-        txt_nonseq_field.build_vocab(train_data, val_data)
+        if not args.test:
+            txt_field.build_vocab(train_data, val_data)
+            txt_nonseq_field.build_vocab(train_data, val_data)
+            with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'wb') as file:
+                pickle.dump(txt_field.vocab.stoi, file)
+            with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'wb') as file:
+                pickle.dump(txt_field.vocab.itos, file)
 
-        with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'wb') as file:
-            pickle.dump(txt_field.vocab.stoi, file)
-        with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'wb') as file:
-            pickle.dump(txt_field.vocab.itos, file)
+        else:
+            with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'rb') as file:
+                txt_field.vocab.stoi = pickle.load(file)
+            with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'rb') as file:
+                txt_field.vocab.itos = pickle.load(file)
+
 
         sample = next(iter(train_iter))
         logger.info(f'1st train article id is {sample.id}')
@@ -211,49 +220,36 @@ def train():
                                         hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
                                         dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
                                         share_weights=args.share_weights, max_length=max_len, self_attention=int(args.self_attention)).to(device)
-
-        model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-        no_params = sum([np.prod(p.size()) for p in model_parameters])
-        logger.info(f'{no_params} trainable parameters in the model.')
-        crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx)
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.2, momentum=0.99, nesterov=True)
-
-        rouge = Rouge()
-        if val_iter is not None:
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
+        if args.test:
+            model.load_state_dict(torch.load(os.path.join(args.save_model_to, 'summarizer.model')))
+            # model.eval()
         else:
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
-
+            model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+            no_params = sum([np.prod(p.size()) for p in model_parameters])
+            logger.info(f'{no_params} trainable parameters in the model.')
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.2, momentum=0.99, nesterov=True)
+            if val_iter is not None:
+                scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
+            else:
+                scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
+        crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx)
+        rouge = Rouge()
+        
         sent_end_tokens = ['.', '!', '?']
         sent_end_inds = [txt_field.vocab.stoi[token] for token in sent_end_tokens]
 
         epoch = 0
         recursion_count = 0
-        metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
+        if not args.test:
+            metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
+        else: 
+            metrics = {'test_loss':[], 'test_rouge':[]}
 
         logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
-
-        while optimizer.param_groups[0]['lr'] > 1e-5:
-            epoch += 1
-            no_samples = 0
-            epoch_loss = 0
-            val_epoch_loss = 0
+        if args.test:
             rouge_scores = None
-            val_rouge_scores = None
-            batch_count = 0
-            val_batch_count = 0
-
-            model.train()
-
-
-            start = time.time()
-            logger.info(f'Training, epoch {epoch}.')
-            for no, batch in enumerate(train_iter):
-                    
-                if batch.stories.shape[1] > max_len:
-                    continue
-                batch_count += 1
-
+            
+            for no, batch in enumerate(test_iter):
                 story, summary = batch.stories, batch.summary
 
                 lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
@@ -265,13 +261,9 @@ def train():
                 ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
 
                 story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
+                output, _ = model.inference(story , sos_idx, eos_idx)
+                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
 
-                optimizer.zero_grad()
-
-                output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
-
-                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
-                
                 try:
                     temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
                 except RecursionError:
@@ -286,15 +278,7 @@ def train():
                             rouge_scores[key] = {'f': 0.0, 'p': 0.0, 'r': 0.0}
                         else:
                             rouge_scores[key] = dict(rouge_scores[key]) 
-                
-                output = output.contiguous().view(-1, output.shape[-1])
-                summary = summary[:,1:].contiguous().view(-1)
-                loss = crossentropy(output, summary.to(device))
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
-                optimizer.step()
-                epoch_loss += loss.item()
-                no_samples += len(batch.stories)
+
                 if no % 500 == 0 and no != 0:
                     logger.info(f'Batch {no}, processed {no_samples} stories.')
                     logger.info(summary_to_rouge[0])
@@ -303,84 +287,162 @@ def train():
                     logger.info(f'Latest ROUGE: {temp_scores}.')
                     end = time.time()
                     logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
-                    # logger.info('Output sample:')
-                    # logger.info(f'{output_to_rouge[0]}')
-                    # logger.info('Ground truth:')
-                    # logger.info(f'{summary_to_rouge[0]}')
-
-            
-            os.makedirs(args.save_model_to, exist_ok=True)
-            if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model')):
-                logger.info('Removing model from previous epoch...')
-                os.remove(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model'))
-            logger.info(f'Saving model at epoch {epoch}.')
-            torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
-
-            if val_iter is not None:
-                
-                with model.eval() and torch.no_grad():
-                    for batch in val_iter:
-                        val_batch_count += 1
-                        story, summary = batch.stories, batch.summary
-
-                        lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
-                        summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
-                        summary_to_pass = exclude_token(summary, eos_idx)
-                        len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
-                        src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
-                        ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
-
-                        story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
-
-                        output, _ = model(batch.stories.to(device), summary_to_pass.to(device))
-                        output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
-                        try:
-                            temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
-                        except RecursionError:
-                            recursion_count += 1
-                            temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
-                        if val_rouge_scores is None:
-                            val_rouge_scores = temp_scores
-                        else: 
-                            val_rouge_scores = {key: Counter(val_rouge_scores[key]) + Counter(temp_scores[key]) for key in val_rouge_scores.keys()}
-                            for key in val_rouge_scores:
-                                if len(val_rouge_scores[key]) == 0:
-                                    val_rouge_scores[key] = {'f': 0.0, 'p': 0.0, 'r': 0.0}
-                                else:
-                                    val_rouge_scores[key] = dict(val_rouge_scores[key]) 
-
-                        output = output.contiguous().view(-1, output.shape[-1])
-                        summary = summary[:,1:].contiguous().view(-1)
-                        
-                        val_loss = crossentropy(output, summary.to(device))
-                        val_epoch_loss += val_loss.item()
-                    scheduler.step(val_epoch_loss / val_batch_count)
-                        
-                        
-                        
-            else:
-                scheduler.step()
-            
-            logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
             rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
-            val_rouge_scores = {key: {metric: float(val_rouge_scores[key][metric]/val_batch_count) for metric in val_rouge_scores[key].keys()} for key in val_rouge_scores.keys()}
-            metrics['val_loss'].append(val_epoch_loss / val_batch_count)
-            metrics['val_rouge'].append(val_rouge_scores)
-            metrics['train_loss'].append(epoch_loss / batch_count)
-            metrics['train_rouge'].append(rouge_scores)
+            logger.info(f'Test rouge: {rouge_scores}.')
 
-            logger.info(metrics)
-            logger.info('Output sample:')
-            logger.info(f'{output_to_rouge[0]}')
-            logger.info('Ground truth:')
-            logger.info(f'{summary_to_rouge[0]}')
 
-            logger.info(f'Recursion error count at {recursion_count}.')
-            with open(os.path.join(args.save_model_to, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
-                pickle.dump(metrics, file)
 
-            end = time.time()
-            logger.info(f'Epoch {epoch} took {end-start} seconds.')
+
+
+        else:
+            while optimizer.param_groups[0]['lr'] > 1e-5:
+                epoch += 1
+                no_samples = 0
+                epoch_loss = 0
+                val_epoch_loss = 0
+                rouge_scores = None
+                val_rouge_scores = None
+                batch_count = 0
+                val_batch_count = 0
+
+                model.train()
+
+
+                start = time.time()
+                logger.info(f'Training, epoch {epoch}.')
+                for no, batch in enumerate(train_iter):
+                        
+                    if batch.stories.shape[1] > max_len:
+                        continue
+                    batch_count += 1
+
+                    story, summary = batch.stories, batch.summary
+
+                    lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
+                    summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
+
+                    summary_to_pass = exclude_token(summary, eos_idx)
+                    len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
+                    src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
+                    ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
+
+                    story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
+
+                    optimizer.zero_grad()
+
+                    output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
+
+                    output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
+                    
+                    try:
+                        temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
+                    except RecursionError:
+                        recursion_count += 1
+                        temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
+                    if rouge_scores is None:
+                        rouge_scores = temp_scores
+                    else: 
+                        rouge_scores = {key: Counter(rouge_scores[key]) + Counter(temp_scores[key]) for key in rouge_scores.keys()}
+                        for key in rouge_scores:
+                            if len(rouge_scores[key]) == 0:
+                                rouge_scores[key] = {'f': 0.0, 'p': 0.0, 'r': 0.0}
+                            else:
+                                rouge_scores[key] = dict(rouge_scores[key]) 
+                    
+                    output = output.contiguous().view(-1, output.shape[-1])
+                    summary = summary[:,1:].contiguous().view(-1)
+                    loss = crossentropy(output, summary.to(device))
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+                    optimizer.step()
+                    epoch_loss += loss.item()
+                    no_samples += len(batch.stories)
+                    if no % 500 == 0 and no != 0:
+                        logger.info(f'Batch {no}, processed {no_samples} stories.')
+                        logger.info(summary_to_rouge[0])
+                        logger.info(output_to_rouge[0])
+                        logger.info(f'Average loss: {epoch_loss / no}.')
+                        logger.info(f'Latest ROUGE: {temp_scores}.')
+                        end = time.time()
+                        logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
+                        # logger.info('Output sample:')
+                        # logger.info(f'{output_to_rouge[0]}')
+                        # logger.info('Ground truth:')
+                        # logger.info(f'{summary_to_rouge[0]}')
+
+                
+                os.makedirs(args.save_model_to, exist_ok=True)
+                if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model')):
+                    logger.info('Removing model from previous epoch...')
+                    os.remove(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model'))
+                logger.info(f'Saving model at epoch {epoch}.')
+                torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
+
+                if val_iter is not None:
+                    
+                    with model.eval() and torch.no_grad():
+                        for batch in val_iter:
+                            val_batch_count += 1
+                            story, summary = batch.stories, batch.summary
+
+                            lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
+                            summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
+                            summary_to_pass = exclude_token(summary, eos_idx)
+                            len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
+                            src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
+                            ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
+
+                            story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
+
+                            output, _ = model(batch.stories.to(device), summary_to_pass.to(device))
+                            output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
+                            try:
+                                temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
+                            except RecursionError:
+                                recursion_count += 1
+                                temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
+                            if val_rouge_scores is None:
+                                val_rouge_scores = temp_scores
+                            else: 
+                                val_rouge_scores = {key: Counter(val_rouge_scores[key]) + Counter(temp_scores[key]) for key in val_rouge_scores.keys()}
+                                for key in val_rouge_scores:
+                                    if len(val_rouge_scores[key]) == 0:
+                                        val_rouge_scores[key] = {'f': 0.0, 'p': 0.0, 'r': 0.0}
+                                    else:
+                                        val_rouge_scores[key] = dict(val_rouge_scores[key]) 
+
+                            output = output.contiguous().view(-1, output.shape[-1])
+                            summary = summary[:,1:].contiguous().view(-1)
+                            
+                            val_loss = crossentropy(output, summary.to(device))
+                            val_epoch_loss += val_loss.item()
+                        scheduler.step(val_epoch_loss / val_batch_count)
+                            
+                            
+                            
+                else:
+                    scheduler.step()
+                
+                logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
+                rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
+                val_rouge_scores = {key: {metric: float(val_rouge_scores[key][metric]/val_batch_count) for metric in val_rouge_scores[key].keys()} for key in val_rouge_scores.keys()}
+                metrics['val_loss'].append(val_epoch_loss / val_batch_count)
+                metrics['val_rouge'].append(val_rouge_scores)
+                metrics['train_loss'].append(epoch_loss / batch_count)
+                metrics['train_rouge'].append(rouge_scores)
+
+                logger.info(metrics)
+                logger.info('Output sample:')
+                logger.info(f'{output_to_rouge[0]}')
+                logger.info('Ground truth:')
+                logger.info(f'{summary_to_rouge[0]}')
+
+                logger.info(f'Recursion error count at {recursion_count}.')
+                with open(os.path.join(args.save_model_to, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
+                    pickle.dump(metrics, file)
+
+                end = time.time()
+                logger.info(f'Epoch {epoch} took {end-start} seconds.')
     else:
         data = Synthetic(batch_size=32, vocab_size=100, max_in=100, max_out=20, min_in=20, min_out=5)
         input_dim = data.vocab_size + 10    # control length codes
@@ -431,7 +493,7 @@ def train():
             if n % 1000 == 0 and n != 0:
                 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
 
-def summarize_text(text, field, model, device, bpe_applied=True, desired_length=5, desired_source='cnn'):
+def summarize_text(text, field, model, device, bpe_applied=True, desired_length=5, desired_source='cnn', summary=None):
     
     if not bpe_applied:
         with open(os.path.join(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
@@ -457,7 +519,10 @@ def summarize_text(text, field, model, device, bpe_applied=True, desired_length=
         # ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
 
         story = torch.cat((len_tensor, src_tensor, story), dim=1) #ent_tensor, len_tensor, src_tensor, story), dim=1)
-        model.inference(story, 'sos', 'eos')
+        output, _ = model.inference(story, 'sos', 'eos')
+        logger.info(f'Summary: {[txt_field.vocab.itos[out] for out in output]}')
+        if summary is not None:
+            logger.info(f'Summary: {summary}')
 
 
     

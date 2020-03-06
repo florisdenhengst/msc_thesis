@@ -15,7 +15,16 @@ import torch.nn.functional as F
 # https://github.com/bentrevett/pytorch-seq2seq/blob/master/5%20-%20Convolutional%20Sequence%20to%20Sequence%20Learning.ipynb
 
 
-
+def check_for_trigram(new_token, trigrams):
+        if len(trigrams) >= 3:
+            trigrams.append(trigrams[-2:] + [new_token])
+            if trigrams.count(trigrams[-1]) > 1:
+                return trigrams, False
+        elif len(trigrams) == 0:
+            trigrams.append(new_token)  
+        else:
+            trigrams[0] = trigrams[0] + [new_token]
+        return trigrams, True
 
 
 class ControllableSummarizer(nn.Module):
@@ -37,7 +46,7 @@ class ControllableSummarizer(nn.Module):
             self.tok_embedding = None
             self.pos_embedding = None
             self.hid2emb = None
-
+        self.max_length = max_length
         self.encoder = ConvEncoder(input_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
         self.decoder = ConvDecoder(output_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, self_attention, max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
 
@@ -49,6 +58,35 @@ class ControllableSummarizer(nn.Module):
         # print(combined.shape)
         output, attention = self.decoder(trg_tokens, conved, combined)
         return output, attention
+
+
+    
+
+
+    def inference(self, src_tokens, sos_idx, eos_idx):
+
+        conved, combined = self.encoder(src_tokens)
+
+        trg_idx = [sos_idx]
+        trigrams = []
+
+        for i in range(self.max_length):
+
+            trg_tokens = torch.LongTensor(trg_idx).unsqueeze(0).to(device)
+
+            output, attention = self.decoder(trg_tokens, conved, combined)
+        
+            pred_token = torch.argmax(output, dim=1).item()
+            
+            trigrams, beam_continue = check_for_trigram(pred_token, trigrams)
+        
+            trg_indexes.append(pred_token)
+
+            if pred_token == eos_idx:
+                break
+    
+    
+        return trg_idx, attention
 
 
 
