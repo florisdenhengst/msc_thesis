@@ -255,9 +255,10 @@ def train():
         
         if args.test:
             rouge_scores = None
-            
+            batch_count = 0
             with model.eval() and torch.no_grad():
                 for no, batch in enumerate(test_iter):
+                    batch_count += 1
                     story, summary = batch.stories, batch.summary
 
                     lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
@@ -270,7 +271,7 @@ def train():
                     ent_tensor = src_tensor
 
                     story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
-                    logger.info(story.shape)
+                    # logger.info(story.shape)
                     output, _ = model.inference(story.to(device) , sos_idx, eos_idx)
                     # logger.info(output.shape)
                     output_to_rouge = ' '.join([txt_field.vocab.itos[ind] for ind in output])
@@ -293,7 +294,7 @@ def train():
                                 rouge_scores[key] = dict(rouge_scores[key]) 
 
                     if no % 500 == 0 and no != 0:
-                        logger.info(f'Batch {no}, processed {no_samples} stories.')
+                        logger.info(f'Processed {no} stories.')
                         logger.info(summary_to_rouge[0])
                         logger.info(output_to_rouge[0])
                         logger.info(f'Average loss: {epoch_loss / no}.')
