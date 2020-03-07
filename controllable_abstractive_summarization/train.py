@@ -227,9 +227,9 @@ def train():
                                         dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
                                         share_weights=args.share_weights, max_length=max_len, self_attention=int(args.self_attention)).to(device)
         if args.test:
-            # model.load_state_dict(torch.load(os.path.join(args.save_model_to, 'summarizer.model')))
-            print()
-            # model.eval()
+            model.load_state_dict(torch.load(os.path.join(args.save_model_to, 'summarizer.model')))
+            
+            model.eval()
         else:
             model_parameters = filter(lambda p: p.requires_grad, model.parameters())
             no_params = sum([np.prod(p.size()) for p in model_parameters])
@@ -296,11 +296,11 @@ def train():
                     if no % 500 == 0 and no != 0:
                         logger.info(f'Processed {no} stories.')
                         logger.info(summary_to_rouge[0])
-                        logger.info(output_to_rouge[0])
-                        logger.info(f'Average loss: {epoch_loss / no}.')
+                        logger.info(output_to_rouge)
+                        # logger.info(f'Average loss: {epoch_loss / no}.')
                         logger.info(f'Latest ROUGE: {temp_scores}.')
-                        end = time.time()
-                        logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
+                        
+                        
                 rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
                 logger.info(f'Test rouge: {rouge_scores}.')
 
