@@ -256,49 +256,52 @@ def train():
         if args.test:
             rouge_scores = None
             
-            for no, batch in enumerate(test_iter):
-                story, summary = batch.stories, batch.summary
+            with model.eval() and torch.no_grad():
+                for no, batch in enumerate(test_iter):
+                    story, summary = batch.stories, batch.summary
 
-                lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
-                summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
+                    lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
+                    summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
 
-                summary_to_pass = exclude_token(summary, eos_idx)
-                len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
-                src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
-                ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
-                # ent_tensor = src_tensor
+                    summary_to_pass = exclude_token(summary, eos_idx)
+                    len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
+                    src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
+                    ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
+                    ent_tensor = src_tensor
 
-                story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
-                logger.info(story.shape)
-                output, _ = model.inference(story.to(device) , sos_idx, eos_idx)
-                logger.info(output.shape)
-                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output]
+                    story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
+                    logger.info(story.shape)
+                    output, _ = model.inference(story.to(device) , sos_idx, eos_idx)
+                    # logger.info(output.shape)
+                    output_to_rouge = ' '.join([txt_field.vocab.itos[ind] for ind in output])
+                    # print(output_to_rouge)
+                    # print(summary_to_rouge)
 
-                try:
-                    temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
-                except RecursionError:
-                    recursion_count += 1
-                    temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
-                if rouge_scores is None:
-                    rouge_scores = temp_scores
-                else: 
-                    rouge_scores = {key: Counter(rouge_scores[key]) + Counter(temp_scores[key]) for key in rouge_scores.keys()}
-                    for key in rouge_scores:
-                        if len(rouge_scores[key]) == 0:
-                            rouge_scores[key] = {'f': 0.0, 'p': 0.0, 'r': 0.0}
-                        else:
-                            rouge_scores[key] = dict(rouge_scores[key]) 
+                    try:
+                        temp_scores = rouge.get_scores(summary_to_rouge[0], output_to_rouge, avg=True)
+                    except RecursionError:
+                        recursion_count += 1
+                        temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
+                    if rouge_scores is None:
+                        rouge_scores = temp_scores
+                    else: 
+                        rouge_scores = {key: Counter(rouge_scores[key]) + Counter(temp_scores[key]) for key in rouge_scores.keys()}
+                        for key in rouge_scores:
+                            if len(rouge_scores[key]) == 0:
+                                rouge_scores[key] = {'f': 0.0, 'p': 0.0, 'r': 0.0}
+                            else:
+                                rouge_scores[key] = dict(rouge_scores[key]) 
 
-                if no % 500 == 0 and no != 0:
-                    logger.info(f'Batch {no}, processed {no_samples} stories.')
-                    logger.info(summary_to_rouge[0])
-                    logger.info(output_to_rouge[0])
-                    logger.info(f'Average loss: {epoch_loss / no}.')
-                    logger.info(f'Latest ROUGE: {temp_scores}.')
-                    end = time.time()
-                    logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
-            rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
-            logger.info(f'Test rouge: {rouge_scores}.')
+                    if no % 500 == 0 and no != 0:
+                        logger.info(f'Batch {no}, processed {no_samples} stories.')
+                        logger.info(summary_to_rouge[0])
+                        logger.info(output_to_rouge[0])
+                        logger.info(f'Average loss: {epoch_loss / no}.')
+                        logger.info(f'Latest ROUGE: {temp_scores}.')
+                        end = time.time()
+                        logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
+                rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
+                logger.info(f'Test rouge: {rouge_scores}.')
 
         else:
             logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')

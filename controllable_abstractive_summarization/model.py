@@ -58,10 +58,12 @@ class ControllableSummarizer(nn.Module):
         batch_size = conved.shape[0]
 
         trg_idx = {'beam_' + str(i): [sos_idx] for i in range(beam_width)}
-        beam_probs = {'beam_' + str(i): 1 for i in range(beam_width)}
+        beam_probs = {'beam_' + str(i): 0 for i in range(beam_width)}
         trigrams = {'beam_' + str(i): [] for i in range(beam_width)}
 
-        for i in range(self.max_length):   
+        for i in range(self.max_length): 
+            if i > 50:
+                break  
             iter_tokens = []
             iter_probs = []
             for j in range(beam_width):
@@ -70,23 +72,22 @@ class ControllableSummarizer(nn.Module):
                 # print(conved.shape)
                 # print(combined.shape)
                 # print(trg_tokens.shape)
-
+                
                 output, attention = self.decoder(trg_tokens, conved, combined, inference=True)
                 # print(output.shape)
-                if i == 0:
-                    next_probs = torch.topk(output, k=beam_width, dim=2)[0].squeeze().squeeze()
-                    next_tokens = torch.topk(output, k=beam_width, dim=2)[1].squeeze().squeeze()
-                else:
-                    next_probs = torch.topk(output, k=beam_width, dim=2)[0].squeeze().squeeze()[-1,:]
-                    next_tokens = torch.topk(output, k=beam_width, dim=2)[1].squeeze().squeeze()[-1,:]
-                    # assert 1==2
+                next_probs = torch.topk(output, k=beam_width, dim=2)[0].squeeze().squeeze()
+                next_tokens = torch.topk(output, k=beam_width, dim=2)[1].squeeze().squeeze()
+                if i != 0:
+                    next_probs = next_probs[-1,:]
+                    next_tokens = next_tokens[-1,:]
 
-
-                iter_tokens.append(next_tokens)
+                iter_tokens.append(next_tokens.to(self.device))
+                # print(next_probs)
                 # print(next_tokens.shape)
                 # print(next_probs.shape)
-                iter_probs.append(beam_probs[beam] * next_probs)
+                iter_probs.append(beam_probs[beam] + torch.log(next_probs).to(self.device))
             # print(iter_probs)
+
             iter_probs = torch.stack(iter_probs)
             
             iter_idx = torch.topk(iter_probs.flatten(), k=beam_width)[1]
@@ -97,11 +98,18 @@ class ControllableSummarizer(nn.Module):
             y = [idx % beam_width for idx in iter_idx.tolist()]
             # print(x)
             # print(y)
+            # print(trg_idx)
+            # print(beam_probs)
+            # print(iter_probs)
+            tmp_idx = trg_idx.copy()
             
+            tmp_trigrams = trigrams.copy()
             for j in range(beam_width):
-                trigrams['beam_' + str(j)], beam_continue = check_for_trigram(iter_tokens[x[j]][y[j]], trigrams['beam_' + str(x[j])])
-                trg_idx['beam_' + str(j)] = trg_idx['beam_' + str(x[j])] + [iter_tokens[x[j]][y[j]]]
-                beam_probs['beam_' + str(j)] = iter_probs[x[j], y[j]] * int(beam_continue)
+                trigrams['beam_' + str(j)], beam_continue = check_for_trigram(int(iter_tokens[x[j]][y[j]]), tmp_trigrams['beam_' + str(x[j])])
+                trg_idx['beam_' + str(j)] = tmp_idx['beam_' + str(x[j])] + [int(iter_tokens[x[j]][y[j]])]
+                # print(beam_continue)
+                # print(iter_probs)
+                beam_probs['beam_' + str(j)] = iter_probs[x[j], y[j]] - 100*(1-int(beam_continue))
                 if iter_tokens[x[j]][y[j]] == eos_idx:
                     return trg_idx['beam_' + str(j)], attention
 
