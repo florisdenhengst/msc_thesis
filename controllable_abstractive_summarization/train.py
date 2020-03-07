@@ -127,6 +127,7 @@ def train():
         if args.test:
             _, _, test_data = TabularDataset(path=csv_path, format='csv', skip_header=True, fields=train_fields).split(split_ratio=[0.922, 0.043, 0.035], random_state=st)
             train_data, val_data = [], []
+            args.batch_size = 1
             test_iter = BucketIterator(dataset=test_data, batch_size=args.batch_size, 
                 sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
         else:
@@ -179,8 +180,8 @@ def train():
         padding_idx = txt_field.vocab.stoi[txt_field.pad_token]
         sos_idx = txt_field.vocab.stoi['<sos>']
         eos_idx = txt_field.vocab.stoi['<eos>']
-        input_dim = len(txt_field.vocab)
-        output_dim = len(txt_field.vocab)
+        input_dim = len(txt_field.vocab.itos)
+        output_dim = len(txt_field.vocab.itos)
         end = time.time()
 
         logger.info(f'finished in {end-start} seconds.')
@@ -226,7 +227,8 @@ def train():
                                         dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
                                         share_weights=args.share_weights, max_length=max_len, self_attention=int(args.self_attention)).to(device)
         if args.test:
-            model.load_state_dict(torch.load(os.path.join(args.save_model_to, 'summarizer.model')))
+            # model.load_state_dict(torch.load(os.path.join(args.save_model_to, 'summarizer.model')))
+            print()
             # model.eval()
         else:
             model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -264,10 +266,13 @@ def train():
                 len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(int(len_ind)) + '>'] for len_ind in batch.length_tokens]).unsqueeze(dim=1)
                 src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[src_ind] + '>'] for src_ind in batch.source]).unsqueeze(dim=1)
                 ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
+                # ent_tensor = src_tensor
 
                 story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
-                output, _ = model.inference(story , sos_idx, eos_idx)
-                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
+                logger.info(story.shape)
+                output, _ = model.inference(story.to(device) , sos_idx, eos_idx)
+                logger.info(output.shape)
+                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output]
 
                 try:
                     temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
