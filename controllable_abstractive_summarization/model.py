@@ -43,13 +43,27 @@ class ControllableSummarizer(nn.Module):
         self.decoder = ConvDecoder(output_dim, emb_dim, hid_dim, n_layers, kernel_size, dropout_prob, device, padding_idx, self_attention, max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
 
     def forward(self, src_tokens, trg_tokens):
-        # print(src_tokens.shape)
-        # print(trg_tokens.shape)
         conved, combined = self.encoder(src_tokens)
-        # print(conved.shape)
-        # print(combined.shape)
         output, attention = self.decoder(trg_tokens, conved, combined)
         return output, attention
+
+
+    def greedy_inference(self, src_tokens, sos_idx, eos_idx):
+        conved, combined = self.encoder(src_tokens)
+        trg_idx = [sos_idx]
+        for i in range(self.max_length):
+            trg_tokens = torch.LongTensor(trg_idx).unsqueeze(0).to(self.device)
+            output, attention = self.decoder(trg_tokens, conved, combined, inference=True)
+            
+            out_idx = torch.argmax(output, dim=2).squeeze().squeeze()
+            
+            if i != 0:
+                out_idx = out_idx[-1]
+
+            trg_idx.append(int(out_idx))
+            if out_idx == eos_idx:
+                return trg_idx, attention
+        return trg_idx, attention
 
 
     def inference(self, src_tokens, sos_idx, eos_idx, beam_width=3):
@@ -62,53 +76,40 @@ class ControllableSummarizer(nn.Module):
         trigrams = {'beam_' + str(i): [] for i in range(beam_width)}
 
         for i in range(self.max_length): 
-            if i > 50:
-                break  
             iter_tokens = []
             iter_probs = []
+
             for j in range(beam_width):
                 beam = 'beam_' + str(j)
+
                 trg_tokens = torch.LongTensor(trg_idx[beam]).unsqueeze(0).to(self.device)
-                # print(conved.shape)
-                # print(combined.shape)
-                # print(trg_tokens.shape)
                 
                 output, attention = self.decoder(trg_tokens, conved, combined, inference=True)
-                # print(output.shape)
+                
                 next_probs = torch.topk(output, k=beam_width, dim=2)[0].squeeze().squeeze()
                 next_tokens = torch.topk(output, k=beam_width, dim=2)[1].squeeze().squeeze()
+                
                 if i != 0:
                     next_probs = next_probs[-1,:]
                     next_tokens = next_tokens[-1,:]
 
                 iter_tokens.append(next_tokens.to(self.device))
-                # print(next_probs)
-                # print(next_tokens.shape)
-                # print(next_probs.shape)
                 iter_probs.append(beam_probs[beam] + torch.log(next_probs).to(self.device))
-            # print(iter_probs)
 
             iter_probs = torch.stack(iter_probs)
             
             iter_idx = torch.topk(iter_probs.flatten(), k=beam_width)[1]
-            # print(iter_probs)
-            # print(iter_tokens)
             
             x = [idx // beam_width for idx in iter_idx.tolist()]
             y = [idx % beam_width for idx in iter_idx.tolist()]
-            # print(x)
-            # print(y)
-            # print(trg_idx)
-            # print(beam_probs)
-            # print(iter_probs)
             tmp_idx = trg_idx.copy()
             
             tmp_trigrams = trigrams.copy()
+            # print(iter_probs)
+            # print(iter_idx)
             for j in range(beam_width):
                 trigrams['beam_' + str(j)], beam_continue = check_for_trigram(int(iter_tokens[x[j]][y[j]]), tmp_trigrams['beam_' + str(x[j])])
                 trg_idx['beam_' + str(j)] = tmp_idx['beam_' + str(x[j])] + [int(iter_tokens[x[j]][y[j]])]
-                # print(beam_continue)
-                # print(iter_probs)
                 beam_probs['beam_' + str(j)] = iter_probs[x[j], y[j]] - 100*(1-int(beam_continue))
                 if iter_tokens[x[j]][y[j]] == eos_idx:
                     return trg_idx['beam_' + str(j)], attention

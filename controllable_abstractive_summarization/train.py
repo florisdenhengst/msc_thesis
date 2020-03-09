@@ -501,9 +501,8 @@ def train():
                 logger.info(summary_to_pass[0])
                 logger.info(output_to_rouge[0])
             if n % 2000 == 0 and n != 0:
-                scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
+                scheduler.step()
                 if args.test:
-                    rouge_scores = None
                     batch_count = 0
                     with model.eval() and torch.no_grad():
                         for no, batch in enumerate(test_data):
@@ -511,10 +510,12 @@ def train():
                             story = batch['input']
                             summary_to_pass = exclude_token(batch['output'], int(data.eos_idx))
                             output, _ = model.inference(story.to(device) , sos_idx, eos_idx)
+                            greedy_output, _ = model.greedy_inference(story.to(device) , sos_idx, eos_idx)
                             if no % 20 == 0 and no != 0:
                                 logger.info(f'Processed {no} stories.')
-                                logger.info(summary_to_pass)
-                                logger.info(output)
+                                logger.info(f'True: {summary_to_pass}')
+                                logger.info(f'Beam: {output}')
+                                logger.info(f'Greedy: {greedy_output}')
                             if no % 100 == 0 and no != 0:
                                 break
 
