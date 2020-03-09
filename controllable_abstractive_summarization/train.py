@@ -455,12 +455,18 @@ def train():
                 end = time.time()
                 logger.info(f'Epoch {epoch} took {end-start} seconds.')
     else:
-        data = Synthetic(batch_size=32, vocab_size=100, max_in=100, max_out=20, min_in=20, min_out=5)
+        padding_idx = 0
+        sos_idx = 1
+        eos_idx = 2
+        data = Synthetic(batch_size=32, vocab_size=100, max_in=100, max_out=20, min_in=20, min_out=5,
+                        padding_idx=padding_idx, sos_idx=sos_idx, eos_idx=eos_idx)
+        test_data = Synthetic(batch_size=1, vocab_size=100, max_in=100, max_out=20, min_in=20, min_out=5,
+                        padding_idx=padding_idx, sos_idx=sos_idx, eos_idx=eos_idx)
         input_dim = data.vocab_size + 10    # control length codes
         output_dim = data.vocab_size + 10   # control length codes
         max_len = max(data.max_in_len, data.max_out_len) + 2
-        padding_idx = data.padding_idx
-        val_iter = None
+        
+        
         model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
                                         hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
                                         dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
@@ -477,32 +483,41 @@ def train():
             story = batch['input']
             summary_to_pass = exclude_token(batch['output'], int(data.eos_idx))
             optimizer.zero_grad()
-            # print(story.shape)
-            # print(summary_to_pass.shape)
             output, _ = model(story.to(device), summary_to_pass.to(device))
             
             output_to_rouge = [[int(ind) for ind in torch.argmax(summ, dim=1)] for summ in output]
-            # logger.info(output.shape)
             output = output.contiguous().view(-1, output.shape[-1])
-            # logger.info(output.shape)
-            # logger.info(batch['output'].shape)
-            # logger.info(summary_to_pass.shape)
             summary = batch['output'][:,1:].contiguous().view(-1)
-            # logger.info(summary.shape)
             loss = crossentropy(output, summary.to(device))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
             optimizer.step()
             epoch_loss += loss.item()
 
-            if n % 50 == 0:
+            if n % 500 == 0:
                 logger.info(f'Batch {n+1}, loss: {epoch_loss / (n+1)}.')
                 logger.info
                 logger.info(story[0])
                 logger.info(summary_to_pass[0])
                 logger.info(output_to_rouge[0])
-            if n % 1000 == 0 and n != 0:
+            if n % 2000 == 0 and n != 0:
                 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
+                if args.test:
+                    rouge_scores = None
+                    batch_count = 0
+                    with model.eval() and torch.no_grad():
+                        for no, batch in enumerate(test_data):
+                            batch_count += 1
+                            story = batch['input']
+                            summary_to_pass = exclude_token(batch['output'], int(data.eos_idx))
+                            output, _ = model.inference(story.to(device) , sos_idx, eos_idx)
+                            if no % 20 == 0 and no != 0:
+                                logger.info(f'Processed {no} stories.')
+                                logger.info(summary_to_pass)
+                                logger.info(output)
+                            if no % 100 == 0 and no != 0:
+                                break
+
 
 def summarize_text(text, field, model, device, bpe_applied=True, desired_length=5, desired_source='cnn', summary=None):
     

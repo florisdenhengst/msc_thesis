@@ -13,13 +13,16 @@ coloredlogs.install(logger=logger, level='DEBUG', fmt='%(asctime)s - %(name)s - 
 
 
 class Synthetic(Dataset):
-    def __init__(self, batch_size, vocab_size, max_in=100, max_out=20, min_in=20, min_out=5):
+    def __init__(self, batch_size, vocab_size, max_in=100, max_out=20, min_in=20, min_out=5, 
+                        padding_idx=0, sos_idx=1, eos_idx=2):
         super(Synthetic).__init__()
         self.batch_size = batch_size
         self.count = 0
-        self.padding_idx = 0
-        self.sos_idx = 1
-        self.eos_idx = 2
+        
+        self.padding_idx = padding_idx
+        self.sos_idx = sos_idx
+        self.eos_idx = eos_idx
+        
         self.vocab_size = vocab_size
         self.max_in_len = max_in
         self.max_out_len = max_out
