@@ -151,27 +151,26 @@ def train():
         logger.info('Started building vocabs...')
         
         start = time.time()
-        if not args.test:
-            txt_field.build_vocab(train_data, val_data)
-            txt_nonseq_field.build_vocab(train_data, val_data)
-            with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'wb') as file:
-                pickle.dump(txt_field.vocab.stoi, file)
-            with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'wb') as file:
-                pickle.dump(txt_field.vocab.itos, file)
-            sample = next(iter(train_iter))
-            logger.info(f'1st train article id is {sample.id}')
-            sample = next(iter(val_iter))
-            logger.info(f'1st val article id is {sample.id}')
-        else:
-            txt_field.build_vocab(test_data)
-            txt_nonseq_field.build_vocab(test_data)
+        
+        txt_field.build_vocab(train_data, val_data)
+        txt_nonseq_field.build_vocab(train_data, val_data)
+        if os.path.exists(os.path.join(args.save_model_to, 'vocab_stoi.pkl')):
             with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'rb') as file:
                 txt_field.vocab.stoi = pickle.load(file)
             with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'rb') as file:
                 txt_field.vocab.itos = pickle.load(file)
-
-
+        else:
+            with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'wb') as file:
+                pickle.dump(txt_field.vocab.stoi, file)
+            with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'wb') as file:
+                pickle.dump(txt_field.vocab.itos, file)
         
+        if not args.test:
+            sample = next(iter(train_iter))
+            logger.info(f'1st train article id is {sample.id}')
+            sample = next(iter(val_iter))
+            logger.info(f'1st val article id is {sample.id}')
+            
 
         len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
         source_tokens = ['<cnn>', '<dailymail>']
@@ -193,6 +192,7 @@ def train():
         st_pads = 0
         sm_pads = 0
         sys.setrecursionlimit(1500)
+
         if not args.test:
             for batch in train_iter:
                 stories_len.append(batch.stories.shape[1])
@@ -228,13 +228,20 @@ def train():
                                         share_weights=args.share_weights, max_length=max_len, self_attention=int(args.self_attention)).to(device)
         if args.test:
             model.load_state_dict(torch.load(os.path.join(args.save_model_to, 'summarizer.model')))
-            
             model.eval()
+            metrics = {'test_loss':[], 'test_rouge':[]}
         else:
+            
+            if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(args.epoch) + '.model')):
+                model.load_state_dict(torch.load(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(args.epoch) + '.model')))
+            epoch = args.epoch
+            metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
+            if os.path.exists(os.path.join(args.save_model_to, 'metrics_epoch_' + str(args.epoch) + '.pkl')):
+                metrics  = pickle.load(os.path.join(args.save_model_to, 'metrics_epoch_' + str(args.epoch) + '.pkl'))
             model_parameters = filter(lambda p: p.requires_grad, model.parameters())
             no_params = sum([np.prod(p.size()) for p in model_parameters])
             logger.info(f'{no_params} trainable parameters in the model.')
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.2, momentum=0.99, nesterov=True)
+            optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.99, nesterov=True)
             if val_iter is not None:
                 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
             else:
@@ -245,12 +252,9 @@ def train():
         sent_end_tokens = ['.', '!', '?']
         sent_end_inds = [txt_field.vocab.stoi[token] for token in sent_end_tokens]
 
-        epoch = 0
+        
         recursion_count = 0
-        if not args.test:
-            metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
-        else: 
-            metrics = {'test_loss':[], 'test_rouge':[]}
+            
 
         
         if args.test:
@@ -376,10 +380,7 @@ def train():
                         logger.info(f'Latest ROUGE: {temp_scores}.')
                         end = time.time()
                         logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
-                        # logger.info('Output sample:')
-                        # logger.info(f'{output_to_rouge[0]}')
-                        # logger.info('Ground truth:')
-                        # logger.info(f'{summary_to_rouge[0]}')
+                        
 
                 
                 os.makedirs(args.save_model_to, exist_ok=True)
@@ -583,10 +584,12 @@ if __name__ == '__main__':
                         help='size of kernel in convolution')    
     parser.add_argument('--dropout_prob', type=int, default=DROPOUT_PROB,
                         help='dropout probability')    
-    parser.add_argument('--lr', type=float, default=0.001,
+    parser.add_argument('--lr', type=float, default=0.2,
                         help='predictor learning rate')
     parser.add_argument('--seed', type=int, default=42,
                         help='Train with a fixed seed')
+    parser.add_argument('--epoch', type=int, default=0,
+                        help='Epoch number (if cont training)')
     parser.add_argument('--test', action='store_true',
                         help='Use test set')
     parser.add_argument('--full_train', action='store_true',
