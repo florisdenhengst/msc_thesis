@@ -237,7 +237,8 @@ def train():
             epoch = args.epoch
             metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
             if os.path.exists(os.path.join(args.save_model_to, 'metrics_epoch_' + str(args.epoch) + '.pkl')):
-                metrics  = pickle.load(os.path.join(args.save_model_to, 'metrics_epoch_' + str(args.epoch) + '.pkl'))
+                with open(os.path.join(args.save_model_to, 'metrics_epoch_' + str(args.epoch) + '.pkl'), 'rb') as file:
+                    metrics  = pickle.load(file)
             model_parameters = filter(lambda p: p.requires_grad, model.parameters())
             no_params = sum([np.prod(p.size()) for p in model_parameters])
             logger.info(f'{no_params} trainable parameters in the model.')
