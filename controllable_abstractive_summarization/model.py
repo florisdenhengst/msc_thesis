@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import copy
 
 # controllable abstractive summarization
 # conv seq2seq with intra-attention and BPE encoding for word embeddings
@@ -24,6 +25,7 @@ class ControllableSummarizer(nn.Module):
                         kernel_size, dropout_prob, device, padding_idx, share_weights=False, max_length=1500, self_attention=1):
         super(ControllableSummarizer, self).__init__()
         self.device = device
+        self.padding_idx = padding_idx
         if share_weights:
             self.tok_embedding = nn.Embedding(input_dim, emb_dim)
             nn.init.normal_(self.tok_embedding.weight, 0, 0.1)
@@ -70,51 +72,69 @@ class ControllableSummarizer(nn.Module):
 
         conved, combined = self.encoder(src_tokens)
         batch_size = conved.shape[0]
+        # print(src_tokens.shape)
 
-        trg_idx = {'beam_' + str(i): [sos_idx] for i in range(beam_width)}
-        beam_probs = {'beam_' + str(i): 0 for i in range(beam_width)}
-        trigrams = {'beam_' + str(i): [] for i in range(beam_width)}
+        trg_idx = {'beam_' + str(i): [[sos_idx] for j in range(batch_size)] for i in range(beam_width)}
+        beam_probs = {'beam_' + str(i): torch.tensor([[0 for k in range(beam_width)] for j in range(batch_size)]) for i in range(beam_width)}
+        trigrams = {'beam_' + str(i): [[] for j in range(batch_size)] for i in range(beam_width)}
+        
+        batch_complete = [False for b in range(batch_size)]
+        beam_for_batch = [-1 for b in range(batch_size)]
 
         for i in range(self.max_length): 
+            
             iter_tokens = []
             iter_probs = []
 
             for j in range(beam_width):
                 beam = 'beam_' + str(j)
 
-                trg_tokens = torch.LongTensor(trg_idx[beam]).unsqueeze(0).to(self.device)
+                trg_tokens = torch.LongTensor(trg_idx[beam]).to(self.device)
                 
-                output, attention = self.decoder(trg_tokens, conved, combined, inference=True)
-                
+                output, _ = self.decoder(trg_tokens, conved, combined, inference=True)
+
                 next_probs = torch.topk(output, k=beam_width, dim=2)[0].squeeze().squeeze()
+
                 next_tokens = torch.topk(output, k=beam_width, dim=2)[1].squeeze().squeeze()
-                
                 if i != 0:
-                    next_probs = next_probs[-1,:]
-                    next_tokens = next_tokens[-1,:]
+                    next_probs = next_probs[:,-1,:]
+                    next_tokens = next_tokens[:,-1,:]
 
                 iter_tokens.append(next_tokens.to(self.device))
-                iter_probs.append(beam_probs[beam] + torch.log(next_probs).to(self.device))
+                iter_probs.append(beam_probs[beam].clone().detach() + torch.log(next_probs).to(self.device))
 
             iter_probs = torch.stack(iter_probs)
+            tmp_probs = torch.stack([torch.stack([iter_probs[i][j] for i in range(iter_probs.shape[0])]).flatten() for j in range(iter_probs.shape[1])])
+            iter_idx = torch.topk(tmp_probs, k=beam_width, dim=1)[1]
             
-            iter_idx = torch.topk(iter_probs.flatten(), k=beam_width)[1]
+            x = [idx // beam_width for idx in iter_idx]
+            y = [idx % beam_width for idx in iter_idx]
             
-            x = [idx // beam_width for idx in iter_idx.tolist()]
-            y = [idx % beam_width for idx in iter_idx.tolist()]
-            tmp_idx = trg_idx.copy()
             
-            tmp_trigrams = trigrams.copy()
-            # print(iter_probs)
-            # print(iter_idx)
-            for j in range(beam_width):
-                trigrams['beam_' + str(j)], beam_continue = check_for_trigram(int(iter_tokens[x[j]][y[j]]), tmp_trigrams['beam_' + str(x[j])])
-                trg_idx['beam_' + str(j)] = tmp_idx['beam_' + str(x[j])] + [int(iter_tokens[x[j]][y[j]])]
-                beam_probs['beam_' + str(j)] = iter_probs[x[j], y[j]] - 100*(1-int(beam_continue))
-                if iter_tokens[x[j]][y[j]] == eos_idx:
-                    return trg_idx['beam_' + str(j)], attention
+            tmp_idx = copy.deepcopy(trg_idx)
+            tmp_trigrams = copy.deepcopy(trigrams)
 
-        return trg_idx['beam_' + str(j)], attention
+            for b in range(batch_size):
+                if not batch_complete[b]:
+                    for j in range(beam_width):
+                        trigrams['beam_' + str(j)][b], beam_continue = check_for_trigram(int(iter_tokens[x[b][j]][b,y[b][j]]), tmp_trigrams['beam_' + str(int(x[b][j]))][b])
+                        trg_idx['beam_' + str(j)][b] = tmp_idx['beam_' + str(int(x[b][j]))][b] + [int(iter_tokens[x[b][j]][b,y[b][j]])]
+                        beam_probs['beam_' + str(j)] = iter_probs[x[b][j]][b, y[b][j]] - 100*(1-int(beam_continue))
+                        if int(iter_tokens[x[b][j]][b,y[b][j]]) == eos_idx:
+                            batch_complete[b] = True
+                            beam_for_batch[b] = j
+                elif sum(batch_complete) == len(batch_complete):
+                    print('finished early')
+                    return trg_idx, beam_for_batch
+                else:
+                    trg_idx['beam_' + str(beam_for_batch[b])][b] = trg_idx['beam_' + str(beam_for_batch[b])][b] + [self.padding_idx]
+        return trg_idx, beam_for_batch
+
+
+
+
+
+        
     
     
         
@@ -314,10 +334,11 @@ class ConvDecoder(nn.Module):
             padding = torch.zeros(batch_size, 
                                       self.hid_dim, 
                                       self.kernel_size - 1).fill_(self.padding_idx).to(self.device)   
-
+            # print(padding.shape)
+            # print(conv_input.shape)
             padded_conv_input = torch.cat((padding, 
                                         conv_input), dim = 2)           #padded_conv_input = [batch size, hid dim, trg len + kernel size - 1]
-        
+            # print(padded_conv_input.shape)
             #pass through convolutional layer
             conved = conv(padded_conv_input)                        #conved = [batch size, 2 * hid dim, trg len]
             

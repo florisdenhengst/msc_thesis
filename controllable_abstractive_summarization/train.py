@@ -460,9 +460,9 @@ def train():
         padding_idx = 0
         sos_idx = 1
         eos_idx = 2
-        data = Synthetic(batch_size=32, vocab_size=100, max_in=100, max_out=20, min_in=20, min_out=5,
+        data = Synthetic(batch_size=6, vocab_size=100, max_in=50, max_out=10, min_in=20, min_out=5,
                         padding_idx=padding_idx, sos_idx=sos_idx, eos_idx=eos_idx)
-        test_data = Synthetic(batch_size=1, vocab_size=100, max_in=100, max_out=20, min_in=20, min_out=5,
+        test_data = Synthetic(batch_size=6, vocab_size=100, max_in=50, max_out=10, min_in=20, min_out=5,
                         padding_idx=padding_idx, sos_idx=sos_idx, eos_idx=eos_idx)
         input_dim = data.vocab_size + 10    # control length codes
         output_dim = data.vocab_size + 10   # control length codes
@@ -496,7 +496,7 @@ def train():
             optimizer.step()
             epoch_loss += loss.item()
 
-            if n % 500 == 0:
+            if n % 2000 == 0:
                 logger.info(f'Batch {n+1}, loss: {epoch_loss / (n+1)}.')
                 logger.info
                 logger.info(story[0])
@@ -511,13 +511,15 @@ def train():
                             batch_count += 1
                             story = batch['input']
                             summary_to_pass = exclude_token(batch['output'], int(data.eos_idx))
-                            output, _ = model.inference(story.to(device) , sos_idx, eos_idx)
-                            greedy_output, _ = model.greedy_inference(story.to(device) , sos_idx, eos_idx)
+                            output, beams = model.inference(story.to(device) , sos_idx, eos_idx)
+                            # print(output)
+                            output = torch.tensor([output['beam_' + str(abs(i))][b] for b, i in enumerate(beams)])
+                            # print(output)
                             if no % 20 == 0 and no != 0:
                                 logger.info(f'Processed {no} stories.')
-                                logger.info(f'True: {summary_to_pass}')
-                                logger.info(f'Beam: {output}')
-                                logger.info(f'Greedy: {greedy_output}')
+                                logger.info(f'True: {summary_to_pass[0]}')
+                                logger.info(f'Beam: {output[0]}')
+                                # logger.info(f'Greedy: {greedy_output}')
                             if no % 100 == 0 and no != 0:
                                 break
 
