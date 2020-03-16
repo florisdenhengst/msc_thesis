@@ -127,7 +127,8 @@ class ControllableSummarizer(nn.Module):
                     print('finished early')
                     return trg_idx, beam_for_batch
                 else:
-                    trg_idx['beam_' + str(beam_for_batch[b])][b] = trg_idx['beam_' + str(beam_for_batch[b])][b] + [self.padding_idx]
+                    for j in range(beam_width):
+                        trg_idx['beam_' + str(j)][b] = trg_idx['beam_' + str(j)][b] + [self.padding_idx]
         return trg_idx, beam_for_batch
 
 
