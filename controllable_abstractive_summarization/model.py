@@ -75,7 +75,7 @@ class ControllableSummarizer(nn.Module):
         # print(src_tokens.shape)
 
         trg_idx = {'beam_' + str(i): [[sos_idx] for j in range(batch_size)] for i in range(beam_width)}
-        beam_probs = {'beam_' + str(i): torch.tensor([[0 for k in range(beam_width)] for j in range(batch_size)]) for i in range(beam_width)}
+        beam_probs = {'beam_' + str(i): torch.FloatTensor([[0 for k in range(beam_width)] for j in range(batch_size)]) for i in range(beam_width)}
         trigrams = {'beam_' + str(i): [[] for j in range(batch_size)] for i in range(beam_width)}
         
         batch_complete = [False for b in range(batch_size)]
@@ -93,15 +93,15 @@ class ControllableSummarizer(nn.Module):
                 
                 output, _ = self.decoder(trg_tokens, conved, combined, inference=True)
 
-                next_probs = torch.topk(output, k=beam_width, dim=2)[0].squeeze().squeeze()
+                next_probs = torch.topk(output, k=beam_width, dim=2)[0].squeeze().squeeze().to(self.device)
 
-                next_tokens = torch.topk(output, k=beam_width, dim=2)[1].squeeze().squeeze()
+                next_tokens = torch.topk(output, k=beam_width, dim=2)[1].squeeze().squeeze().to(self.device)
                 if i != 0:
                     next_probs = next_probs[:,-1,:]
                     next_tokens = next_tokens[:,-1,:]
 
-                iter_tokens.append(next_tokens.to(self.device))
-                iter_probs.append(beam_probs[beam] + torch.log(next_probs).to(self.device))
+                iter_tokens.append(next_tokens)
+                iter_probs.append(beam_probs[beam] + torch.log(next_probs))
 
             iter_probs = torch.stack(iter_probs)
             tmp_probs = torch.stack([torch.stack([iter_probs[i][j] for i in range(iter_probs.shape[0])]).flatten() for j in range(iter_probs.shape[1])])
