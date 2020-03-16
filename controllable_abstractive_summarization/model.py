@@ -123,12 +123,12 @@ class ControllableSummarizer(nn.Module):
                         if int(iter_tokens[x[b][j]][b,y[b][j]]) == eos_idx:
                             batch_complete[b] = True
                             beam_for_batch[b] = j
-                elif sum(batch_complete) == len(batch_complete):
-                    print('finished early')
-                    return trg_idx, beam_for_batch
                 else:
                     for j in range(beam_width):
                         trg_idx['beam_' + str(j)][b] = trg_idx['beam_' + str(j)][b] + [self.padding_idx]
+            if sum(batch_complete) == len(batch_complete):
+                print('finished early')
+                return trg_idx, beam_for_batch
         return trg_idx, beam_for_batch
 
 
