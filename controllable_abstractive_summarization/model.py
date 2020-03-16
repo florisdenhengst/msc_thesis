@@ -101,7 +101,7 @@ class ControllableSummarizer(nn.Module):
                     next_tokens = next_tokens[:,-1,:]
 
                 iter_tokens.append(next_tokens.to(self.device))
-                iter_probs.append(beam_probs[beam].clone().detach() + torch.log(next_probs).to(self.device))
+                iter_probs.append(beam_probs[beam] + torch.log(next_probs).to(self.device))
 
             iter_probs = torch.stack(iter_probs)
             tmp_probs = torch.stack([torch.stack([iter_probs[i][j] for i in range(iter_probs.shape[0])]).flatten() for j in range(iter_probs.shape[1])])
