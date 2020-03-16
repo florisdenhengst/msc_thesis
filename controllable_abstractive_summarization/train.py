@@ -513,7 +513,7 @@ def train():
                             story = batch['input']
                             summary_to_pass = exclude_token(batch['output'], int(data.eos_idx))
                             output, beams = model.inference(story.to(device) , sos_idx, eos_idx)
-                            # print(output)
+                            logger.info(f'Beams before selection: {output}')
                             output = torch.tensor([output['beam_' + str(abs(i))][b] for b, i in enumerate(beams)])
                             # print(output)
                             
