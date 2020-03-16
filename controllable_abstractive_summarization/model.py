@@ -75,7 +75,7 @@ class ControllableSummarizer(nn.Module):
         # print(src_tokens.shape)
 
         trg_idx = {'beam_' + str(i): [[sos_idx] for j in range(batch_size)] for i in range(beam_width)}
-        beam_probs = {'beam_' + str(i): torch.FloatTensor([[0 for k in range(beam_width)] for j in range(batch_size)]) for i in range(beam_width)}
+        beam_probs = {'beam_' + str(i): torch.FloatTensor([[0 for k in range(beam_width)] for j in range(batch_size)]).to(self.device) for i in range(beam_width)}
         trigrams = {'beam_' + str(i): [[] for j in range(batch_size)] for i in range(beam_width)}
         
         batch_complete = [False for b in range(batch_size)]
