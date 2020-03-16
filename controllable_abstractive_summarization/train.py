@@ -127,7 +127,7 @@ def train():
         if args.test:
             _, _, test_data = TabularDataset(path=csv_path, format='csv', skip_header=True, fields=train_fields).split(split_ratio=[0.922, 0.043, 0.035], random_state=st)
             train_data, val_data = [], []
-            args.batch_size = 1
+            # args.batch_size = 1
             test_iter = BucketIterator(dataset=test_data, batch_size=args.batch_size, 
                 sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
         else:
@@ -277,14 +277,14 @@ def train():
 
                     story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
                     # logger.info(story.shape)
-                    output, _ = model.inference(story.to(device) , sos_idx, eos_idx)
-                    # logger.info(output.shape)
-                    output_to_rouge = ' '.join([txt_field.vocab.itos[ind] for ind in output])
+                    output, beams = model.inference(story.to(device) , sos_idx, eos_idx)
+                    output = torch.tensor([output['beam_' + str(abs(i))][b] for b, i in enumerate(beams)])
+                    output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output]
                     # print(output_to_rouge)
                     # print(summary_to_rouge)
 
                     try:
-                        temp_scores = rouge.get_scores(summary_to_rouge[0], output_to_rouge, avg=True)
+                        temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
                     except RecursionError:
                         recursion_count += 1
                         temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
@@ -298,9 +298,9 @@ def train():
                             else:
                                 rouge_scores[key] = dict(rouge_scores[key]) 
 
-                    if no % 500 == 0 and no != 0:
-                        logger.info(f'Processed {no} stories.')
-                        logger.info(summary_to_rouge[0])
+                    if no % 50 == 0 and no != 0:
+                        logger.info(f'Processed {no} batches.')
+                        logger.info(summary_to_rouge)
                         logger.info(output_to_rouge)
                         # logger.info(f'Average loss: {epoch_loss / no}.')
                         logger.info(f'Latest ROUGE: {temp_scores}.')
