@@ -31,7 +31,7 @@ Both models were trained for 10 epochs, and the model with best performance on v
 
 Some sample responses, as produced by the two models (without teacher forcing):  
 * Ground truth: ['a', 'little', 'girl', 'climbing', 'into', 'a', 'wooden', 'playhouse', '.']
-*  Original model inference: ['a', 'little', 'girl', 'climbing', 'in', 'a', 'playhouse', 'out', 'wood', '.', '<eos>']
+* * Original model inference: ['a', 'little', 'girl', 'climbing', 'in', 'a', 'playhouse', 'out', 'wood', '.', '<eos>']
 * * New model inference: ['a', 'little', 'girl', 'climbing', 'into', 'a', 'wooden', 'playhouse', '.', '<eos>']
 * Ground truth: ['two', 'men', 'are', 'at', 'the', 'stove', 'preparing', 'food', '.']
 * * Original model inference: ['two', 'men', 'stand', 'on', 'the', 'stove', 'preparing', 'food', 'and', 'preparing', 'food', '.', '<eos>']
@@ -43,3 +43,22 @@ For this experiment, the task remains the same: translation from German to Engli
 * Self-attention added
 * Embedding dimension increased from 256 to 340
 * SGD optimizer used with learning rate 0.2 decreased when validation loss stops decreasing
+
+While the original implementationby Fan et. al, 2017, had a separate attention and self-attention mechanism for every convolutional layer, for this experiment only one of each was kept due to the relatively small size of the training dataset. 
+
+### Initial failure
+After initial run of the experiment, it was observed that the new model is underperforming: while the loss was decreasing and the sequences predicted with teacher forcing were close to perfect, actual inference without teacher forcing led to close to random results. Since the main difference between the setup of the new model in the 1st and 2nd experiments was in the self-attention layer, it was decided to investigate this module. 
+
+### Lacking masks for future time-steps
+As pointed out in this [tutorial](https://pytorch.org/tutorials/beginner/transformer_tutorial.html), the future time-steps from the decoder have to be masked when using teacher-forcing. Otherwise, the model cah "cheat" by looking up the needed targets. Therefore, the self-attention module in the implementation was adjusted to include this modification; afterwards, the experimental results suggested satisfactory performance. 
+
+### Debugged experimental results
+![some_text](/debugging_plots/losses_new_experiment_1.png)
+
+* | Test Loss: 1.656 | Test PPL:   5.240 |
+* Ground truth: ['a', 'man', 'in', 'an', 'orange', 'hat', 'starring', 'at', 'something', '.']
+* * New model inference: ['a', 'man', 'in', 'an', 'orange', 'hat', 'is', '<unk>', 'something', '.', '<eos>']
+* Ground truth: ['a', 'boston', 'terrier', 'is', 'running', 'on', 'lush', 'green', 'grass', 'in', 'front', 'of', 'a', 'white', 'fence', '.']
+* * New model inference: ['a', 'football', 'runner', 'is', 'running', 'across', 'grass', 'grass', 'in', 'front', 'of', 'a', 'white', 'fence', '.', '<eos>']
+* Ground truth: ['a', 'girl', 'in', 'karate', 'uniform', 'breaking', 'a', 'stick', 'with', 'a', 'front', 'kick', '.']
+* * New model inference: ['a', 'girl', 'in', 'a', 'karate', 'uniform', 'is', 'flipping', 'a', 'board', 'with', 'a', 'kick', '.', '<eos>']
