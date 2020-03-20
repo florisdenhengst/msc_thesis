@@ -139,11 +139,7 @@ def train():
                 sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
         
         logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
-        
-        # batch_tokens = 800 * args.batch_size
-        # train_iter = MyIterator(dataset=train_data, batch_size=batch_tokens, 
-            # sort_key= lambda x:(len(x.stories), len(x.summary)),
-            # batch_size_fn=batch_size_fn, train=True, shuffle=True)
+
         end = time.time()
         
         logger.info(f'finished in {end-start} seconds.')
@@ -298,8 +294,8 @@ def train():
                             else:
                                 rouge_scores[key] = dict(rouge_scores[key]) 
 
-                    if no % 50 == 0 and no != 0:
-                        logger.info(f'Processed {no} batches.')
+                    if no % 50 == 0:
+                        logger.info(f'Processed {no+1} batches.')
                         logger.info(summary_to_rouge)
                         logger.info(output_to_rouge)
                         # logger.info(f'Average loss: {epoch_loss / no}.')
@@ -344,7 +340,6 @@ def train():
 
                     story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
 
-                    optimizer.zero_grad()
 
                     output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
 
@@ -371,6 +366,8 @@ def train():
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
                     optimizer.step()
+                    optimizer.zero_grad()
+
                     epoch_loss += loss.item()
                     no_samples += len(batch.stories)
                     if no % 500 == 0 and no != 0:
@@ -407,7 +404,12 @@ def train():
 
                             story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
 
-                            output, _ = model(batch.stories.to(device), summary_to_pass.to(device))
+                            output, _ = model(story.to(device), summary_to_pass.to(device))
+                            if val_batch_count % 100 == 0:
+                                output_greedy, _ = model.greedy_inference(story.to(device) , sos_idx, eos_idx)
+                                output_greedy = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_greedy]
+                                logger.info(f'Greedy prediction: {output_beam[0]}')
+                                logger.info(f'True summary: {summary_to_rouge[0]}')
                             output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
                             try:
                                 temp_scores = rouge.get_scores(summary_to_rouge, output_to_rouge, avg=True)
@@ -445,10 +447,6 @@ def train():
                 metrics['train_rouge'].append(rouge_scores)
 
                 logger.info(metrics)
-                logger.info('Output sample:')
-                logger.info(f'{output_to_rouge[0]}')
-                logger.info('Ground truth:')
-                logger.info(f'{summary_to_rouge[0]}')
 
                 logger.info(f'Recursion error count at {recursion_count}.')
                 with open(os.path.join(args.save_model_to, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
