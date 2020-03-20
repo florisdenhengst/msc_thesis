@@ -29,6 +29,9 @@ Both models were trained for 10 epochs, and the model with best performance on v
 * Original: | Test Loss: 1.862 | Test PPL:   6.437 |
 * New: | Test Loss: 1.637 | Test PPL:   5.139 |
 
+![](./debugging_plots/losses_new_experiment_1.png)
+![](./debugging_plots/losses_original_experiment_1.png)
+
 Some sample responses, as produced by the two models (without teacher forcing):  
 * Ground truth: ['a', 'little', 'girl', 'climbing', 'into', 'a', 'wooden', 'playhouse', '.']
 * * Original model inference: ['a', 'little', 'girl', 'climbing', 'in', 'a', 'playhouse', 'out', 'wood', '.', '<eos>']
@@ -44,7 +47,7 @@ For this experiment, the task remains the same: translation from German to Engli
 * Embedding dimension increased from 256 to 340
 * SGD optimizer used with learning rate 0.2 decreased when validation loss stops decreasing
 
-While the original implementationby Fan et. al, 2017, had a separate attention and self-attention mechanism for every convolutional layer, for this experiment only one of each was kept due to the relatively small size of the training dataset. 
+While the original implementation by Fan et. al, 2017, had a separate attention and self-attention mechanism for every convolutional layer, for this experiment only one of each was kept due to the relatively small size of the training dataset. Moreover, since the model relies on learning rate reduction, it was trained for 20 rather than 10 epochs.
 
 ### Initial failure
 After initial run of the experiment, it was observed that the new model is underperforming: while the loss was decreasing and the sequences predicted with teacher forcing were close to perfect, actual inference without teacher forcing led to close to random results. Since the main difference between the setup of the new model in the 1st and 2nd experiments was in the self-attention layer, it was decided to investigate this module. 
@@ -53,7 +56,7 @@ After initial run of the experiment, it was observed that the new model is under
 As pointed out in this [tutorial](https://pytorch.org/tutorials/beginner/transformer_tutorial.html), the future time-steps from the decoder have to be masked when using teacher-forcing. Otherwise, the model cah "cheat" by looking up the needed targets. Therefore, the self-attention module in the implementation was adjusted to include this modification; afterwards, the experimental results suggested satisfactory performance. 
 
 ### Debugged experimental results
-![some_text](/debugging_plots/losses_new_experiment_1.png)
+![](./debugging_plots/losses_new_experiment_2.png)
 
 * | Test Loss: 1.656 | Test PPL:   5.240 |
 * Ground truth: ['a', 'man', 'in', 'an', 'orange', 'hat', 'starring', 'at', 'something', '.']
