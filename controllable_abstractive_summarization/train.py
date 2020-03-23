@@ -274,6 +274,7 @@ def train():
                     story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
                     # logger.info(story.shape)
                     output, beams = model.inference(story.to(device) , sos_idx, eos_idx)
+                    # output, attention = model.greedy_inference(story.to(device) , sos_idx, eos_idx)
                     output = torch.tensor([output['beam_' + str(abs(i))][b] for b, i in enumerate(beams)])
                     output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output]
                     # print(output_to_rouge)
@@ -339,8 +340,6 @@ def train():
                     ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
 
                     story = torch.cat((ent_tensor, len_tensor, src_tensor, story), dim=1)
-
-
                     output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
 
                     output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        

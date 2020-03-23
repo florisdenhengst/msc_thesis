@@ -59,19 +59,29 @@ class ControllableSummarizer(nn.Module):
 
     def greedy_inference(self, src_tokens, sos_idx, eos_idx):
         conved, combined = self.encoder(src_tokens)
-        trg_idx = [sos_idx]
+        batch_size = conved.shape[0]
+        trg_idx = [[sos_idx] for j in range(batch_size)]
+        batch_complete = [False for b in range(batch_size)]
         for i in range(self.max_length):
-            trg_tokens = torch.LongTensor(trg_idx).unsqueeze(0).to(self.device)
+            trg_tokens = torch.LongTensor(trg_idx).to(self.device)
+            
             output, attention = self.decoder(trg_tokens, conved, combined, inference=True)
             
-            out_idx = torch.argmax(output, dim=2).squeeze().squeeze().item()
+            out_idx = torch.argmax(output, dim=2)
+            
             
             if i != 0:
-                out_idx = out_idx[-1]
+                out_idx = out_idx[:, -1]
 
-            trg_idx.append(int(out_idx))
-            if out_idx == eos_idx:
+            for j, ind in enumerate(out_idx):
+                trg_idx[j].append(int(ind))
+                if int(ind) == eos_idx:
+                    batch_complete[b] = True
+            if sum(batch_complete) == len(batch_complete):
+                print('stop early')
                 break
+
+            
         return trg_idx, attention
 
 
