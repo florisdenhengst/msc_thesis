@@ -226,7 +226,7 @@ class ConvEncoder(nn.Module):
             conv_input = conved
 
         conved = self.hid2emb(conved.permute(0, 2, 1))          #conved = [batch size, src len, emb dim]
-                combined = (conved + x) * self.scale             #combined = [batch size, src len, emb dim]
+        combined = (conved + x) * self.scale             #combined = [batch size, src len, emb dim]
         
         return conved, combined
 
