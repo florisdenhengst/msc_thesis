@@ -280,7 +280,7 @@ class ConvDecoder(nn.Module):
         
         
         if self_attention_heads != 0:
-            self.attns = nn.ModuleList([Attention(hid_dim, emb_dim, self_attention=False, device=self.device) if i % 2 == 0 else SelfAttention(hid_dim, emb_dim)
+            self.attns = nn.ModuleList([Attention(hid_dim, emb_dim, self_attention=False, device=self.device) if i % 2 == 0 else SelfAttention(hid_dim, emb_dim, self.device)
                                     for i in range(n_layers)])
         else:
             self.attns = nn.ModuleList([Attention(hid_dim, emb_dim, self_attention=False, device=self.device) if i % 2 == 0 else None
