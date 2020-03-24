@@ -76,7 +76,7 @@ class ControllableSummarizer(nn.Module):
             for j, ind in enumerate(out_idx):
                 trg_idx[j].append(int(ind))
                 if int(ind) == eos_idx:
-                    batch_complete[b] = True
+                    batch_complete[j] = True
             if sum(batch_complete) == len(batch_complete):
                 print('stop early')
                 break
