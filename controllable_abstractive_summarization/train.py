@@ -407,7 +407,7 @@ def train():
                             if val_batch_count % 100 == 0:
                                 output_greedy, _ = model.greedy_inference(story.to(device) , sos_idx, eos_idx)
                                 output_greedy = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_greedy]
-                                logger.info(f'Greedy prediction: {output_beam[0]}')
+                                logger.info(f'Greedy prediction: {output_greedy[0]}')
                                 logger.info(f'True summary: {summary_to_rouge[0]}')
                             output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
                             try:
