@@ -1,0 +1,15 @@
+#!/bin/sh
+#SBATCH --time=02:00:00
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH -C TitanX
+#SBATCH --gres=gpu:1
+
+source activate venv_train
+module load opencl-nvidia/9.0
+
+nvidia-smi
+printenv
+/bin/hostname
+srun python3 ../code/check_gpu.py
+

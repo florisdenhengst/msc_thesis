@@ -1,0 +1,12 @@
+#!/bin/sh
+#SBATCH --time=47:59:59
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH -C TitanX
+#SBATCH --gres=gpu:1
+
+git pull
+source activate venv_train
+module load opencl-nvidia/9.0
+
+srun python3 ../code/train.py --share_weights --full_train --batch_size=15 --self_attention

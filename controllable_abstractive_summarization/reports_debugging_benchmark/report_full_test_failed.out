@@ -1,0 +1,44 @@
+Already up-to-date.
+2020-03-12 15:58:27 - Training log - INFO - Training on cuda 
+2020-03-12 15:58:27 - Training log - INFO - Started loading data...
+2020-03-12 16:13:49 - Training log - INFO - 0 train samples, 0 validation samples, 13420 test samples...
+2020-03-12 16:13:49 - Training log - INFO - finished in 921.7378165721893 seconds.
+2020-03-12 16:13:49 - Training log - INFO - Started building vocabs...
+2020-03-12 16:13:49 - Training log - INFO - finished in 0.24085044860839844 seconds.
+2020-03-12 16:13:49 - Training log - INFO - Initializing model with:
+2020-03-12 16:13:49 - Training log - INFO - Input dim: 19423, output dim: 19423, emb dim: 340 hid dim: 512, 8 layers, 3x1 kernel, 0.2 dropout, sharing weights: True, maximum length: 1000.
+2020-03-12 16:40:58 - Training log - INFO - Processed 500 stories.
+2020-03-12 16:40:58 - Training log - INFO - <sos>   @entity0 posted the photo of his casino outing on his @entity56 page . the un@@ defeated champion has been training heavily for his fight with @entity13 on may 2 in @entity5 . the high roller lived up to his reputation by posting the gambling image <eos>
+2020-03-12 16:40:58 - Training log - INFO - <sos>   @entity2 \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99 <eos>
+2020-03-12 16:40:58 - Training log - INFO - Latest ROUGE: {'rouge-1': {'f': 0.0851063798822998, 'p': 0.05263157894736842, 'r': 0.2222222222222222}, 'rouge-2': {'f': 0.0, 'p': 0.0, 'r': 0.0}, 'rouge-l': {'f': 0.05485512850461964, 'p': 0.05263157894736842, 'r': 0.2222222222222222}}.
+2020-03-12 17:23:22 - Training log - INFO - Processed 1000 stories.
+2020-03-12 17:23:22 - Training log - INFO - <sos>   mo@@ b pulls rape suspect out of jail and kills him . suspec@@ t was undocumented @entity19 sett@@ ler . rac@@ ial tensions between local n@@ aga people and @entity19 migrants high <eos>
+2020-03-12 17:23:22 - Training log - INFO - <sos>   @entity2 , 29 , charged charged <eos>
+2020-03-12 17:23:22 - Training log - INFO - Latest ROUGE: {'rouge-1': {'f': 0.1111111083333334, 'p': 0.06666666666666667, 'r': 0.3333333333333333}, 'rouge-2': {'f': 0.0, 'p': 0.0, 'r': 0.0}, 'rouge-l': {'f': 0.06878306878285147, 'p': 0.06666666666666667, 'r': 0.3333333333333333}}.
+2020-03-12 18:25:54 - Training log - INFO - Processed 1500 stories.
+2020-03-12 18:25:54 - Training log - INFO - <sos>   three people are dead and nine injured after violence erup@@ ts at @entity16 demonstration . more than 100 are arrested , accused of " acts of destruction and burning " . protesters want the prime minister and parliament to resign . protesters want assembly to write new constitution and oversee democratic transition <eos>
+2020-03-12 18:25:54 - Training log - INFO - <sos>   @entity2 's \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99 <eos>
+2020-03-12 18:25:54 - Training log - INFO - Latest ROUGE: {'rouge-1': {'f': 0.07692307381656818, 'p': 0.047619047619047616, 'r': 0.2}, 'rouge-2': {'f': 0.0, 'p': 0.0, 'r': 0.0}, 'rouge-l': {'f': 0.04964841252903399, 'p': 0.047619047619047616, 'r': 0.2}}.
+2020-03-12 19:24:54 - Training log - INFO - Processed 2000 stories.
+2020-03-12 19:24:54 - Training log - INFO - <sos>   the @entity12 president will meet with @entity16 and others . pro@@ tests have erupted across the country for nearly six months . at least two people died in @entity76 province saturday , activists said <eos>
+2020-03-12 19:24:54 - Training log - INFO - <sos>   @entity2 's \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99 <eos>
+2020-03-12 19:24:54 - Training log - INFO - Latest ROUGE: {'rouge-1': {'f': 0.09302325224445661, 'p': 0.06060606060606061, 'r': 0.2}, 'rouge-2': {'f': 0.0, 'p': 0.0, 'r': 0.0}, 'rouge-l': {'f': 0.06437989008276458, 'p': 0.06060606060606061, 'r': 0.2}}.
+2020-03-12 20:44:23 - Training log - INFO - Processed 2500 stories.
+2020-03-12 20:44:23 - Training log - INFO - <sos>   @entity8 , 17 , says officials killed the profile that told of his coming out . @entity115 's assistant editor : " it 's big thing in @entity19 to be gay " . superintendent : " we must make decisions that lead in the proper direction for all of our students " <eos>
+2020-03-12 20:44:23 - Training log - INFO - <sos>   @entity2 had the \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99 <eos>
+2020-03-12 20:44:23 - Training log - INFO - Latest ROUGE: {'rouge-1': {'f': 0.11320754388038456, 'p': 0.07142857142857142, 'r': 0.2727272727272727}, 'rouge-2': {'f': 0.0, 'p': 0.0, 'r': 0.0}, 'rouge-l': {'f': 0.07498110555665947, 'p': 0.07142857142857142, 'r': 0.2727272727272727}}.
+2020-03-12 21:51:23 - Training log - INFO - Processed 3000 stories.
+2020-03-12 21:51:23 - Training log - INFO - <sos>   about 130 military @entity0 advisers are being dispatched to @entity2 , officials say . the advisers will be made up of @entity13 and special operations forces . " this is not a combat boots on the ground operation , " defense secretary says . residents in @entity39 riot following car bomb explosion , police officials say <eos>
+2020-03-12 21:51:23 - Training log - INFO - <sos>   @entity2 has moved \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99 <eos>
+2020-03-12 21:51:23 - Training log - INFO - Latest ROUGE: {'rouge-1': {'f': 0.10169491222062635, 'p': 0.0625, 'r': 0.2727272727272727}, 'rouge-2': {'f': 0.0, 'p': 0.0, 'r': 0.0}, 'rouge-l': {'f': 0.0650000446733166, 'p': 0.0625, 'r': 0.2727272727272727}}.
+2020-03-12 23:21:52 - Training log - INFO - Processed 3500 stories.
+2020-03-12 23:21:52 - Training log - INFO - <sos>   the three women were 49 , 44 and 23 and all from different parts of @entity5 . they were found locked in bathroom while @entity146 gas detec@@ tor showed warning . they are suspected to have died of carbon mon@@ oxide poisoning . police say women all left notes and that they met on online chat room <eos>
+2020-03-12 23:21:52 - Training log - INFO - <sos>   @entity2 had \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99 <eos>
+2020-03-12 23:21:52 - Training log - INFO - Latest ROUGE: {'rouge-1': {'f': 0.06896551438763389, 'p': 0.041666666666666664, 'r': 0.2}, 'rouge-2': {'f': 0.0, 'p': 0.0, 'r': 0.0}, 'rouge-l': {'f': 0.04308552584391897, 'p': 0.041666666666666664, 'r': 0.2}}.
+2020-03-13 00:42:04 - Training log - INFO - Processed 4000 stories.
+2020-03-13 00:42:04 - Training log - INFO - <sos>   @entity7 town of @entity15 bans tourists taking pictures of @entity1 dogs . comes after @entity26 into miserable conditions the dogs are kept in . the report says they are locked up in a condemned building or made to stand in the cold for hours at a time <eos>
+2020-03-13 00:42:04 - Training log - INFO - <sos>   @entity2 \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99@@ t \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99@@ t \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99@@ t \@@ x@@ e@@ 2@@ \@@ x@@ 80@@ \@@ x@@ 99 <eos>
+2020-03-13 00:42:04 - Training log - INFO - Latest ROUGE: {'rouge-1': {'f': 0.07999999656800015, 'p': 0.05128205128205128, 'r': 0.18181818181818182}, 'rouge-2': {'f': 0.0, 'p': 0.0, 'r': 0.0}, 'rouge-l': {'f': 0.05414674361056001, 'p': 0.05128205128205128, 'r': 0.18181818181818182}}.
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+slurmstepd: error: *** JOB 739925 ON node404 CANCELLED AT 2020-03-13T01:58:22 DUE TO TIME LIMIT ***
+slurmstepd: error: *** STEP 739925.0 ON node404 CANCELLED AT 2020-03-13T01:58:22 DUE TO TIME LIMIT ***
