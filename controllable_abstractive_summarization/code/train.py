@@ -12,7 +12,7 @@ import torch.nn as nn
 import numpy as np
 import re
 import pickle
-
+from pathlib import Path
 from collections import Counter
 from rouge import Rouge
 from data_preprocess import anonymize_and_bpe_data, MyIterator, batch_size_fn
@@ -98,7 +98,9 @@ def extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field):
 
 
 def train():
-    data_path = os.path.join(os.getcwd(), 'data/')
+    # data_path = os.path.join(os.getcwd(), 'data/')
+    data_path = Path(Path.cwd().parent, 'data/')
+    save_model_path = Path(Path.cwd().parent, args.save_model_to)
     if not args.synth:
         nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "ner"])
         txt_field = Field(tokenize=lambda x: [tok.text for tok in nlp.tokenizer(x)], 
@@ -115,10 +117,10 @@ def train():
 
         start = time.time()
         if args.full_train:
-            csv_path = os.path.join(data_path, 'cnn_dailymail.csv')
+            csv_path = Path(data_path, 'cnn_dailymail.csv')
         else:
-            csv_path = os.path.join(data_path, 'cnn_dailymail_test_purposes.csv')
-        if not os.path.exists(csv_path):
+            csv_path = Path(ata_path, 'cnn_dailymail_test_purposes.csv')
+        if not Path.exists(csv_path):
             logger.info(f'creating pre-processed data...')
             anonymize_and_bpe_data(data_path=data_path, sources=['cnn'], cut_off_length=400)
 
@@ -150,15 +152,15 @@ def train():
         
         txt_field.build_vocab(train_data, val_data)
         txt_nonseq_field.build_vocab(train_data, val_data)
-        if os.path.exists(os.path.join(args.save_model_to, 'vocab_stoi.pkl')):
-            with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'rb') as file:
+        if Path.exists(Path(save_model_path, 'vocab_stoi.pkl')):
+            with open(Path(save_model_path, 'vocab_stoi.pkl'), 'rb') as file:
                 txt_field.vocab.stoi = pickle.load(file)
-            with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'rb') as file:
+            with open(Path(save_model_path, 'vocab_itos.pkl'), 'rb') as file:
                 txt_field.vocab.itos = pickle.load(file)
         else:
-            with open(os.path.join(args.save_model_to, 'vocab_stoi.pkl'), 'wb') as file:
+            with open(Path(save_model_path, 'vocab_stoi.pkl'), 'wb') as file:
                 pickle.dump(txt_field.vocab.stoi, file)
-            with open(os.path.join(args.save_model_to, 'vocab_itos.pkl'), 'wb') as file:
+            with open(Path(save_model_path, 'vocab_itos.pkl'), 'wb') as file:
                 pickle.dump(txt_field.vocab.itos, file)
         
         if not args.test:
@@ -223,17 +225,17 @@ def train():
                                         dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
                                         share_weights=args.share_weights, max_length=max_len, self_attention=int(args.self_attention)).to(device)
         if args.test:
-            model.load_state_dict(torch.load(os.path.join(args.save_model_to, 'summarizer.model')))
+            model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
             model.eval()
             metrics = {'test_loss':[], 'test_rouge':[]}
         else:
             
-            if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(args.epoch) + '.model')):
-                model.load_state_dict(torch.load(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(args.epoch) + '.model')))
+            if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')):
+                model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')))
             epoch = args.epoch
             metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
-            if os.path.exists(os.path.join(args.save_model_to, 'metrics_epoch_' + str(args.epoch) + '.pkl')):
-                with open(os.path.join(args.save_model_to, 'metrics_epoch_' + str(args.epoch) + '.pkl'), 'rb') as file:
+            if Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl')):
+                with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl'), 'rb') as file:
                     metrics  = pickle.load(file)
             model_parameters = filter(lambda p: p.requires_grad, model.parameters())
             no_params = sum([np.prod(p.size()) for p in model_parameters])
@@ -380,12 +382,12 @@ def train():
                         
 
                 
-                os.makedirs(args.save_model_to, exist_ok=True)
-                if os.path.exists(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model')):
+                Path.mkdir(save_model_path, exist_ok=True)
+                if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + '.model')):
                     logger.info('Removing model from previous epoch...')
-                    os.remove(os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch-1) + '.model'))
+                    Path.unlink(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + '.model'))
                 logger.info(f'Saving model at epoch {epoch}.')
-                torch.save(model.state_dict(), os.path.join(args.save_model_to, 'summarizer_epoch_' + str(epoch) + '.model'))
+                torch.save(model.state_dict(), Path(save_model_path, 'summarizer_epoch_' + str(epoch) + '.model'))
 
                 if val_iter is not None:
                     
@@ -448,7 +450,7 @@ def train():
                 logger.info(metrics)
 
                 logger.info(f'Recursion error count at {recursion_count}.')
-                with open(os.path.join(args.save_model_to, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
+                with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
                     pickle.dump(metrics, file)
 
                 end = time.time()
@@ -525,7 +527,7 @@ def train():
 def summarize_text(text, field, model, device, bpe_applied=True, desired_length=5, desired_source='cnn', summary=None):
     
     if not bpe_applied:
-        with open(os.path.join(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
+        with open(Path(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
             bpencoder = BPEncoder(codes)
 
         def repl(match):

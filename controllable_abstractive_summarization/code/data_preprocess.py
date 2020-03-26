@@ -12,6 +12,7 @@ import re
 import sys
 import itertools
 import spacy 
+from pathlib import Path
 import subword_nmt.apply_bpe as apply_bpe
 import numpy as np
 import matplotlib.pyplot as plt
@@ -107,8 +108,8 @@ class CNNDM(Dataset):
         # spacy_en = spacy.load("en", disable=["tagger", "parser", "ner"])
         # self.tokenizer = lambda s: [tok.text for tok in spacy_en.tokenizer(s)]
 
-        self.cnn_stories = os.listdir(os.path.join(data_path, 'cnn/stories/'))
-        self.dm_stories = os.listdir(os.path.join(data_path, 'dailymail/stories'))
+        self.cnn_stories = os.listdir(Path(data_path, 'cnn/stories/'))
+        self.dm_stories = os.listdir(Path(data_path, 'dailymail/stories'))
         
         self.stories = []
         self.sources = []
@@ -180,14 +181,14 @@ class CNNDM(Dataset):
             mapping was found for the URL.
         """
 
-        mapping_filename = os.path.join(self.data_path, '%s/tokens/%s.txt' % (source, path.split('.')[0]))
-        if not os.path.exists(mapping_filename):
+        mapping_filename = Path(self.data_path, '%s/tokens/%s.txt' % (source, path.split('.')[0]))
+        if not Path.exists(mapping_filename):
             return None
 
         mapping = self.loadTokenMapping(mapping_filename)
         article_processed = True
         offset = 0
-        story = open(os.path.join(self.data_path, '%s/stories/%s' % (source, path)), 'rb').read()
+        story = open(Path(self.data_path, '%s/stories/%s' % (source, path)), 'rb').read()
         tokens = []
         for (start, end) in mapping:
             tokens.append(str(story[start:end+1])[2:-1])
@@ -232,8 +233,8 @@ class CNNDM(Dataset):
             None if no entity mapping exists for the news story.
             """
 
-        mapping_filename = os.path.join(self.data_path, '%s/entities/%s.txt' % (source, path.split('.')[0]))
-        if not os.path.exists(mapping_filename):
+        mapping_filename = Path(self.data_path, '%s/entities/%s.txt' % (source, path.split('.')[0]))
+        if not Path.exists(mapping_filename):
             return None
 
         mapping = self.loadEntityMapping(mapping_filename)
@@ -286,12 +287,12 @@ class CNNDM(Dataset):
 
 
 
-def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources=['cnn', 'dailymail'], no_samples=None, cut_off_length=None):
+def anonymize_and_bpe_data(data_path=Path(Path.cwd().parent, 'data/'), sources=['cnn', 'dailymail'], no_samples=None, cut_off_length=None):
     
     logger.info(f'Loading data from {sources} and BPE codes...')
 
     dataset = CNNDM(data_path, cut_off_length, sources)
-    with open(os.path.join(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
+    with open(Path(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
         bpencoder = BPEncoder(codes)
     
     logger.info('...done.')
@@ -299,8 +300,8 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
     processed_data = {'id': [], 'stories':[], 'length_tokens': [], 
                         'length_sentences': [], 'source': [], 'entities': [], 'summary': []}
     
-    tmp_name = os.path.join(data_path, 'tmp.csv')
-    csv_name = os.path.join(data_path, '_'.join(sources) + '.csv')
+    tmp_name = Path(data_path, 'tmp.csv')
+    csv_name = Path(data_path, '_'.join(sources) + '.csv')
     lengths = []
 
     with open(tmp_name, 'w') as tmp_file:
@@ -361,7 +362,7 @@ def anonymize_and_bpe_data(data_path=os.path.join(os.getcwd(), 'data/'), sources
             writer.writerow(row)
 
     logger.info(f'Removing {tmp_name}...')    
-    os.remove(tmp_name)
+    Path.unlink(tmp_name)
     logger.info('...done.')
     
     unique, counts = np.unique(bins, return_counts=True)
