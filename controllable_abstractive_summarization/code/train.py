@@ -99,8 +99,8 @@ def extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field):
 
 def train():
     # data_path = os.path.join(os.getcwd(), 'data/')
-    data_path = Path(Path.cwd().parent, 'data/')
-    save_model_path = Path(Path.cwd().parent, args.save_model_to)
+    data_path = Path(Path.cwd(), 'data/')
+    save_model_path = Path(Path.cwd(), args.save_model_to)
     if not args.synth:
         nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "ner"])
         txt_field = Field(tokenize=lambda x: [tok.text for tok in nlp.tokenizer(x)], 
