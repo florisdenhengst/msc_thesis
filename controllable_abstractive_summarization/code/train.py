@@ -119,7 +119,7 @@ def train():
         if args.full_train:
             csv_path = Path(data_path, 'cnn_dailymail.csv')
         else:
-            csv_path = Path(ata_path, 'cnn_dailymail_test_purposes.csv')
+            csv_path = Path(data_path, 'cnn_dailymail_test_purposes.csv')
         if not Path.exists(csv_path):
             logger.info(f'creating pre-processed data...')
             anonymize_and_bpe_data(data_path=data_path, sources=['cnn'], cut_off_length=400)
