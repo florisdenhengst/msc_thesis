@@ -3,7 +3,7 @@ import os
 import csv
 import argparse
 import ast
-
+import time
 import matplotlib.pyplot as plt
 import nltk
 import pandas as pd
@@ -179,12 +179,6 @@ def analyze_synonyms(words, synonyms, sid):
     return words_val, syns_val, avg_syns_val
     
 
-
-
-
-
-
-
 def analyze_sentiment(full):
     data_path = os.path.join(os.getcwd(), 'data/')
     processed_data = {'id': [], 'stories':[], 'length_tokens': [], 
@@ -196,68 +190,98 @@ def analyze_sentiment(full):
 
     
     sentiments_summary = {'neu':[], 'pos':[], 'neg':[], 'compound':[]}
-    sentiments_story = {'neu':[], 'pos':[], 'neg':[], 'compound':[]}
     valence_words_summary = []
+    sentiments_story = {'neu':[], 'pos':[], 'neg':[], 'compound':[]}
     valence_words_story = []
     
     sid = SentimentIntensityAnalyzer()
     counter = 0
+    start = time.time()
+    t = 0
 
     with open(csv_path, 'r') as file:
         reader = csv.DictReader(file, fieldnames=processed_data.keys())
 
         
         for no, line in enumerate(reader):
+            if no % 10000 == 0:
+                print(f'Processed {no} stories.')
             tmp_words_summary = {'words': [], 'scores': [], 'windows': []}
             tmp_words_story = {'words': [], 'scores': [], 'windows': []}
 
             story = line['stories'].replace('@@ ', '')
             summary = line['summary'].replace('@@ ', '')
 
-            # entities = ast.literal_eval(line['entities'])
-            # for entity in entities.keys():
-            #     story = story.replace(' ' + entity + ' ', ' ' + entities[entity] + ' ')
-            #     summary = summary.replace(' ' + entity + ' ', ' ' + entities[entity] + ' ')
+            if args.entities:
+                entities = ast.literal_eval(line['entities'])
+                for entity in entities.keys():
+                    story = story.replace(' ' + entity + ' ', ' ' + entities[entity] + ' ')
+                    summary = summary.replace(' ' + entity + ' ', ' ' + entities[entity] + ' ')
     
-            sentiment_scores, sentvalues, sentwords, sentwindows = get_words_valence_scores(story, sid)
-            for key in sentiment_scores.keys():
-                sentiments_story[key].append(sentiment_scores[key])
-            valence_words_story.append({'words': sentwords, 'scores': sentvalues, 'windows': sentwindows})
+
+            if args.stories:
+                sentiment_scores, sentvalues, sentwords, sentwindows = get_words_valence_scores(story, sid)
+                for key in sentiment_scores.keys():
+                    sentiments_story[key].append(sentiment_scores[key])
+                valence_words_story.append({'words': sentwords, 'scores': sentvalues, 'windows': sentwindows})
             
             sentiment_scores, sentvalues, sentwords, sentwindows = get_words_valence_scores(summary, sid)
             for key in sentiment_scores.keys():
                 sentiments_summary[key].append(sentiment_scores[key])
             valence_words_summary.append({'words': sentwords, 'scores': sentvalues, 'windows': sentwindows})
-    all_words_story = np.concatenate([valence_words_story[i]['words'] for i in range(len(valence_words_story))])
-    words_story, freqs_story = np.unique(all_words_story,return_counts=True)
-    words_story = words_story[np.argsort(freqs_story)[::-1]]
-    freqs_story[::-1].sort()
+    end = time.time()
+    t += 1
+    print(f'Phase {t}: {end - start}')
+    start = time.time()
+
+    if args.stories:
+        all_words_story = np.concatenate([valence_words_story[i]['words'] for i in range(len(valence_words_story))])
+        words_story, freqs_story = np.unique(all_words_story,return_counts=True)
+        words_story = words_story[np.argsort(freqs_story)[::-1]]
+        freqs_story[::-1].sort()
+
+        scores_story = []
+        all_scores_story = np.concatenate([valence_words_story[i]['scores'] for i in range(len(valence_words_story))])
+        for word in words_story:
+            scores_story.append(np.sum(all_scores_story[np.where(all_words_story == word)]))
+        df_story = print_word_frequency_results(words_story, scores_story, freqs_story, sid, 100, 'stories')
+        print(f'Summary positive, word average: {df_story["pos"].ind_scores.mean()}')
+        print(f'Summary positive, synonym-word average: {(df_story["pos"].syn_scores - df_story["pos"].ind_scores).mean()}')
+        print(f'Summary negative, word average: {df_story["neg"].ind_scores.mean()}')
+        print(f'Summary negative, synonym-word average: {(df_story["neg"].syn_scores - df_story["neg"].ind_scores).mean()}')
+
+
+        end = time.time()
+        t += 1
+        print(f'Phase {t}: {end - start}')
+        start = time.time()
 
     all_words_summary = np.concatenate([valence_words_summary[i]['words'] for i in range(len(valence_words_summary))])
     words_summary, freqs_summary = np.unique(all_words_summary,return_counts=True)
     words_summary = words_summary[np.argsort(freqs_summary)[::-1]]
     freqs_summary[::-1].sort()
-
-    scores_story = []
-    all_scores_story = np.concatenate([valence_words_story[i]['scores'] for i in range(len(valence_words_story))])
-    for word in words_story:
-        scores_story.append(np.sum(all_scores_story[np.where(all_words_story == word)]))
     scores_summary = []
     all_scores_summary = np.concatenate([valence_words_summary[i]['scores'] for i in range(len(valence_words_summary))])
     for word in words_summary:
         scores_summary.append(np.sum(all_scores_summary[np.where(all_words_summary == word)]))
-    df_story = print_word_frequency_results(words_story, scores_story, freqs_story, sid, 100, 'stories')
     df_summary = print_word_frequency_results(words_summary, scores_summary, freqs_summary, sid, 100, 'summaries')
+
+    end = time.time()
+    t += 1
+    print(f'Phase {t}: {end - start}')
+
     print(f'Summary positive, word average: {df_summary["pos"].ind_scores.mean()}')
-    print(f'Summary positive, synonym-word average: {(df_summary["pos"].syn_scores - df_story["pos"].ind_scores).mean()}')
+    print(f'Summary positive, synonym-word average: {(df_summary["pos"].syn_scores - df_summary["pos"].ind_scores).mean()}')
     print(f'Summary negative, word average: {df_summary["neg"].ind_scores.mean()}')
-    print(f'Summary negative, synonym-word average: {(df_summary["neg"].syn_scores - df_story["neg"].ind_scores).mean()}')
+    print(f'Summary negative, synonym-word average: {(df_summary["neg"].syn_scores - df_summary["neg"].ind_scores).mean()}')
 
-    # plot_hist(sentiments_summary, 'summary')
 
-    # plot_hist(sentiments_story, 'story')
+    if args.plots:
+        plot_hist(sentiments_summary, 'summary')
 
-    # plot_hist(sentiments_summary, 'diff', sentiments_story)
+        if args.stories:
+            plot_hist(sentiments_story, 'story')
+            plot_hist(sentiments_summary, 'diff', sentiments_story)
 
 
 if __name__ == '__main__':
@@ -266,6 +290,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--full', action='store_true',
                         help='Analyze full dataset')
+    parser.add_argument('--entities', action='store_true',
+                        help='Run analysis on non-anonymized datast')
+    parser.add_argument('--stories', action='store_true',
+                        help='Run analysis on stories as well')
+    parser.add_argument('--plots', action='store_true',
+                        help='Create histograms')
     
     args = parser.parse_args()
     analyze_sentiment(args.full)
