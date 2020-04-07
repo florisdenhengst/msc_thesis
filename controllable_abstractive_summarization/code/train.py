@@ -454,7 +454,7 @@ def train():
                 rouge_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores)
                 
                 output = output.contiguous().view(-1, output.shape[-1])
-                summary = summary[:,1:].contiguous().view(-1)
+                summary = batch.summary[:,1:].contiguous().view(-1)
                 loss = crossentropy(output, summary.to(device))
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
@@ -488,7 +488,7 @@ def train():
                     val_rouge_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, val_rouge_scores)
 
                     output = output.contiguous().view(-1, output.shape[-1])
-                    summary = summary[:,1:].contiguous().view(-1)
+                    summary = batch.summary[:,1:].contiguous().view(-1)
                     val_loss = crossentropy(output, summary.to(device))
                     val_epoch_loss += val_loss.item()
                 scheduler.step(val_epoch_loss / val_batch_count)
