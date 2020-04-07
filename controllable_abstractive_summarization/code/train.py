@@ -43,14 +43,17 @@ def add_tokens_to_vocab(txt_field, tokens):
     return txt_field
 
 
-def exclude_token(summaries, eos):
+def exclude_token(summaries, index, pad=False):
     
     new_summaries = []
     for summ in summaries:
-        eos_idx = (summ == eos).nonzero()
+        cutoff = (summ == index).nonzero()
         # print(type(eos_idx))
         # print(eos_idx)
-        new_summaries.append(torch.cat((summ[0:eos_idx], summ[eos_idx+1:])))
+        if pad:
+            new_summaries.append(summ[0:cutoff])
+        else:
+            new_summaries.append(torch.cat((summ[0:cutoff], summ[cutoff+1:])))
     
     return torch.stack(new_summaries)
 
@@ -128,13 +131,22 @@ def count_pads(train_iter, padding_idx):
 
 
 
-def prepare_summaries(batch, txt_field):
-    summary = batch.summary
-    summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
+def prepare_summaries(batch, txt_field, output=False):
+    if output:
+        summary = batch
+    else:
+        summary = batch.summary
+
     summary_to_pass = exclude_token(summary, txt_field.vocab.stoi['<eos>'])
+    summary_to_rouge = exclude_token(summary, txt_field.vocab.stoi['<sos>'])
+    summary_to_rouge = exclude_token(summary, txt_field.vocab.stoi[txt_field.pad_token])
+    summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
+    
     return summary_to_rouge, summary_to_pass
 
+
 def prepare_story_for_control_test(stories, txt_field, control, control_codes=None, ent_tensor=None):
+
     if control != 'entities':
         ctrl_tensor = torch.tensor([txt_field.vocab.stoi[code] for code in control_codes]).unsqueeze(dim=1)
     else:
@@ -146,7 +158,7 @@ def prepare_story_for_control_test(stories, txt_field, control, control_codes=No
 def test_on_control(model, batch, txt_field, native_controls, flex_controls, control, control_evl_fn, device):
     story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=native_controls)
     output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
-    output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output]
+    output_to_rouge, _ = prepare_summaries(output, txt_field)
     native_results = control_evl_fn(output, batch.summary, story, txt_field)
 
     flex_results = []
@@ -164,9 +176,9 @@ def evalutate_on_length(output, summary, story, txt_field):
     for out in output:
         length = 0
         for ind in output:
-            if ind is sos_idx:
+            if ind == sos_idx:
                 continue
-            if ind is eos_idx:
+            if ind == eos_idx:
                 break
             length += 1
         length_outputs.append(length)
@@ -174,9 +186,9 @@ def evalutate_on_length(output, summary, story, txt_field):
     for summ in summary:
         length = 0
         for ind in summ:
-            if ind is sos_idx:
+            if ind == sos_idx:
                 continue
-            if ind is eos_idx:
+            if ind == eos_idx:
                 break
             length += 1
         length_summary.append(length)
@@ -188,7 +200,8 @@ def test_on_length(model, batch, txt_field, len_tokens, device):
     for token in len_tokens:
         flex_controls.append([token for i in range(len(batch.length_tokens))])
     output_to_rouge, native_results, flex_results = test_on_control(model, batch, txt_field, native_controls, flex_controls, 'length', evalutate_on_length, device)
-    length_performance = [sum(flex['summary'])/len(flex['summary']) for flex in flex_results]
+    length_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
+
     return output_to_rouge, length_performance
 
 
