@@ -96,7 +96,7 @@ class ControllableSummarizer(nn.Module):
         trigrams = {'beam_' + str(i): [[] for j in range(batch_size)] for i in range(beam_width)}
         
         batch_complete = [False for b in range(batch_size)]
-        beam_for_batch = [-1 for b in range(batch_size)]
+        beam_for_batch = [0 for b in range(batch_size)]
 
         for i in range(self.max_beam_length): 
             
@@ -145,8 +145,10 @@ class ControllableSummarizer(nn.Module):
                         trg_idx['beam_' + str(j)][b] = trg_idx['beam_' + str(j)][b] + [self.padding_idx]
             if sum(batch_complete) == len(batch_complete):
                 print('finished early')
-                return trg_idx, beam_for_batch
-        return trg_idx, beam_for_batch
+                return_idx = [trg_idx['beam_' + str(beam_for_batch[i])][i] for i in range(batch_size)]
+                return return_idx
+        return_idx = [trg_idx['beam_' + str(beam_for_batch[i])][i] for i in range(batch_size)]
+        return return_idx
 
 
 def check_for_trigram(new_token, trigrams):
