@@ -143,16 +143,16 @@ def prepare_story_for_control_test(stories, txt_field, control, control_codes=No
     return story
 
 
-def test_on_control(model, batch, txt_field, native_controls, flex_controls, control, control_evl_fn):
+def test_on_control(model, batch, txt_field, native_controls, flex_controls, control, control_evl_fn, device):
     story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=native_controls)
-    output = model.inference(story, txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
+    output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
     # output_argmax = [[ind for ind in torch.argmax(summary, dim=1)] for summary in output]        
     native_results = control_evl_fn(output, batch.summary, story, txt_field)
 
     flex_results = []
     for flex in flex_controls:
         story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=flex)
-        output = model.inference(story, txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
+        output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
         # output_argmax = [[ind for ind in torch.argmax(summary, dim=1)] for summary in output]        
         flex_results.append(control_evl_fn(output, batch.summary, story, control))
     return native_results, flex_results
@@ -182,12 +182,12 @@ def evalutate_on_length(output, summary, story, txt_field):
         length_summary.append(length)
     return {'output': length_outputs, 'summary': length_summary}
 
-def test_on_length(model, batch, txt_field, len_tokens):
+def test_on_length(model, batch, txt_field, len_tokens, device):
     native_controls = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
     flex_controls = []
     for token in len_tokens:
         flex_controls.append([token for i in range(len(batch.length_tokens))])
-    native_results, flex_results = test_on_control(model, batch, txt_field, native_controls, flex_controls, 'length', evalutate_on_length)
+    native_results, flex_results = test_on_control(model, batch, txt_field, native_controls, flex_controls, 'length', evalutate_on_length, device)
     length_performance = [sum(flex['summary'])/len(flex['summary']) for flex in flex_results]
     return length_performance
 
@@ -410,7 +410,7 @@ def train():
 
                 rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores)
                 start = time.time()
-                batch_lengths = test_on_length(model, batch, txt_field, len_tokens)
+                batch_lengths = test_on_length(model, batch, txt_field, len_tokens, device)
                 end = time.time()
                 logger.info(f'finished one length test in {end-start} seconds.')
 
