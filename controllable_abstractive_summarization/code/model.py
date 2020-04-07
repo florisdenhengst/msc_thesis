@@ -27,6 +27,7 @@ class ControllableSummarizer(nn.Module):
         self.device = device
         self.padding_idx = padding_idx
         self.max_length = max_length
+        self.max_beam_length = max_length / 5
 
         # original paper shares word embeddings between encoder and decoder
         if share_weights:
@@ -89,7 +90,6 @@ class ControllableSummarizer(nn.Module):
 
         conved, combined = self.encoder(src_tokens)
         batch_size = conved.shape[0]
-        # print(src_tokens.shape)
 
         trg_idx = {'beam_' + str(i): [[sos_idx] for j in range(batch_size)] for i in range(beam_width)}
         beam_probs = {'beam_' + str(i): torch.FloatTensor([[0 for k in range(beam_width)] for j in range(batch_size)]).to(self.device) for i in range(beam_width)}
@@ -98,7 +98,7 @@ class ControllableSummarizer(nn.Module):
         batch_complete = [False for b in range(batch_size)]
         beam_for_batch = [-1 for b in range(batch_size)]
 
-        for i in range(self.max_length): 
+        for i in range(self.max_beam_length): 
             
             iter_tokens = []
             iter_probs = []
