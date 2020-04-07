@@ -27,7 +27,7 @@ class ControllableSummarizer(nn.Module):
         self.device = device
         self.padding_idx = padding_idx
         self.max_length = max_length
-        self.max_beam_length = max_length / 5
+        self.max_beam_length = int(max_length / 5)
 
         # original paper shares word embeddings between encoder and decoder
         if share_weights:
