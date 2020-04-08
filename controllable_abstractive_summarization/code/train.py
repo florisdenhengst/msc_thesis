@@ -141,7 +141,7 @@ def prepare_summaries(batch, txt_field, output=False):
     else:
         summary = batch.summary
 
-    summary_to_pass = exclude_token(summary, txt_field.vocab.stoi['<eos>'])
+    summary_to_pass = exclude_token(summary, txt_field.vocab.stoi['<eos>'], for_rouge=output)
     summary_to_rouge = exclude_token(summary_to_pass, txt_field.vocab.stoi['<sos>'], for_rouge=True)
     summary_to_rouge = exclude_token(summary_to_rouge, txt_field.vocab.stoi[txt_field.pad_token], for_rouge=True)
     summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summary]) for summary in summary_to_rouge]
@@ -183,21 +183,25 @@ def evalutate_on_length(output, summary, story, txt_field):
     for out in output:
         length = 0
         for ind in output:
+            print(ind)
             if ind == sos_idx:
                 continue
             if ind == eos_idx:
                 break
             length += 1
+        print(length)
         length_outputs.append(length)
     length_summary = []
     for summ in summary:
         length = 0
         for ind in summ:
+            print(ind)
             if ind == sos_idx:
                 continue
             if ind == eos_idx:
                 break
             length += 1
+        print(length)
         length_summary.append(length)
     return {'output': length_outputs, 'summary': length_summary}
 
@@ -446,7 +450,7 @@ def train():
                     logger.info(f'Length performance: {total_length_performance}')
                     # logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
-                    
+                assert 1 == 2
             rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
             logger.info(f'Test rouge: {rouge_scores}.')
             logger.info(f'Length performance: {total_length_performance}')
