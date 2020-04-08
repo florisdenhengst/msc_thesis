@@ -191,7 +191,9 @@ def evalutate_on_length(output, summary, story, txt_field):
             if ind == eos_idx:
                 break
             length += 1
+        print(length)
         length_outputs.append(length)
+
     length_summary = []
     for summ in summary:
         length = 0
