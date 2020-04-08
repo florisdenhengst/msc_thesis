@@ -174,9 +174,10 @@ def test_on_control(model, batch, txt_field, native_controls, flex_controls, con
         output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
         output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
         print(output_to_rouge)
+        print([len(out.split(' ')) for out in output_to_rouge])
         # output_argmax = [[ind for ind in torch.argmax(summary, dim=1)] for summary in output]        
         flex_results.append(control_evl_fn(output, batch.summary, story, txt_field))
-        print(flex_results['output'][-1])
+        print(flex_results[-1]['output'])
     return output_to_rouge, native_results, flex_results
 
 def evalutate_on_length(output, summary, story, txt_field):
