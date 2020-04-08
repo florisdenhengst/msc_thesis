@@ -165,7 +165,7 @@ def prepare_story_for_control_test(stories, txt_field, control, control_codes=No
 def test_on_control(model, batch, txt_field, native_controls, flex_controls, control, control_evl_fn, device):
     story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=native_controls)
     output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
-    output_to_rouge, _ = prepare_summaries(output, txt_field, output=True)
+    output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
     native_results = control_evl_fn(output, batch.summary, story, txt_field)
 
     flex_results = []
