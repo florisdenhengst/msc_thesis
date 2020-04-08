@@ -48,14 +48,19 @@ def exclude_token(summaries, index, pad=False):
     new_summaries = []
     for summ in summaries:
         cutoff = (summ == index).nonzero()
-        # print(type(eos_idx))
-        # print(eos_idx)
         if pad:
-            new_summaries.append(summ[0:cutoff])
+            if len(cutoff) > 1:
+                cutoff = cutoff[0]
+                new_summaries.append(summ[0:cutoff])
+            else:
+                new_summaries.append(summ)
         else:
             new_summaries.append(torch.cat((summ[0:cutoff], summ[cutoff+1:])))
     
-    return torch.stack(new_summaries)
+    if pad:
+        return new_summaries
+    else:
+        return torch.stack(new_summaries)
 
 def get_lead_3(story, txt_field, sent_end_inds):    
     lead_3 = []
@@ -138,9 +143,9 @@ def prepare_summaries(batch, txt_field, output=False):
         summary = batch.summary
 
     summary_to_pass = exclude_token(summary, txt_field.vocab.stoi['<eos>'])
-    summary_to_rouge = exclude_token(summary, txt_field.vocab.stoi['<sos>'])
-    summary_to_rouge = exclude_token(summary, txt_field.vocab.stoi[txt_field.pad_token])
-    summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary]
+    summary_to_rouge = exclude_token(summary_to_pass, txt_field.vocab.stoi['<sos>'])
+    summary_to_rouge = exclude_token(summary_to_rouge, txt_field.vocab.stoi[txt_field.pad_token], pad=True)
+    summary_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in summary_to_rouge]
     
     return summary_to_rouge, summary_to_pass
 
