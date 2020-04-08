@@ -135,11 +135,7 @@ def count_pads(train_iter, padding_idx):
 
 
 
-def prepare_summaries(batch, txt_field, output=False):
-    if output:
-        summary = batch
-    else:
-        summary = batch.summary
+def prepare_summaries(summary, txt_field, output=False):
 
     summary_to_pass = exclude_token(summary, txt_field.vocab.stoi['<eos>'], for_rouge=output)
     summary_to_rouge = exclude_token(summary_to_pass, txt_field.vocab.stoi['<sos>'], for_rouge=True)
@@ -172,39 +168,36 @@ def test_on_control(model, batch, txt_field, native_controls, flex_controls, con
     for flex in flex_controls:
         story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=flex)
         output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
-        output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
-        print(output_to_rouge)
-        print([len(out.split(' ')) for out in output_to_rouge])
+        # output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
         # output_argmax = [[ind for ind in torch.argmax(summary, dim=1)] for summary in output]        
         flex_results.append(control_evl_fn(output, batch.summary, story, txt_field))
-        print(flex_results[-1]['output'])
     return output_to_rouge, native_results, flex_results
 
 def evalutate_on_length(output, summary, story, txt_field):
+    output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
+    summary_to_rouge, _ = prepare_summaries(summary, txt_field)
     sos_idx = txt_field.vocab.stoi['<sos>']
     eos_idx = txt_field.vocab.stoi['<eos>']
-    length_outputs = []
-    for out in output:
-        length = 0
-        for ind in output:
-            if ind == sos_idx:
-                continue
-            if ind == eos_idx:
-                break
-            length += 1
-        print(length)
-        length_outputs.append(length)
-
-    length_summary = []
-    for summ in summary:
-        length = 0
-        for ind in summ:
-            if ind == sos_idx:
-                continue
-            if ind == eos_idx:
-                break
-            length += 1
-        length_summary.append(length)
+    length_outputs = [len(out.split(' ')) for out in output_to_rouge]
+    length_summary = [len(summary.split(' ')) for summary in summary_to_rouge]
+    # for out in output:
+    #     length = 0
+    #     for ind in output:
+    #         if ind == sos_idx:
+    #             continue
+    #         if ind == eos_idx:
+    #             break
+    #         length += 1
+    #     length_outputs.append(length)
+    # for summ in summary:
+    #     length = 0
+    #     for ind in summ:
+    #         if ind == sos_idx:
+    #             continue
+    #         if ind == eos_idx:
+    #             break
+    #         length += 1
+    #     length_summary.append(length)
     return {'output': length_outputs, 'summary': length_summary}
 
 def test_on_length(model, batch, txt_field, len_tokens, device):
@@ -222,7 +215,7 @@ def test_on_length(model, batch, txt_field, len_tokens, device):
 def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds):
     lead_3 = get_lead_3(batch.stories, txt_field, sent_end_inds) 
     
-    summary_to_rouge, summary_to_pass = prepare_summaries(batch, txt_field)
+    summary_to_rouge, summary_to_pass = prepare_summaries(batch.summary, txt_field)
     
     ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)  
     story = prepare_story_for_control_test(batch.stories, txt_field, control='entities', ent_tensor=ent_tensor)
