@@ -159,19 +159,22 @@ def prepare_story_for_control_test(stories, txt_field, control, control_codes=No
 
 
 def test_on_control(model, batch, txt_field, native_controls, flex_controls, control, control_evl_fn, device):
+    outputs = []
     story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=native_controls)
     output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
     output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
+    outputs.append(output_to_rouge)
     native_results = control_evl_fn(output, batch.summary, story, txt_field)
 
     flex_results = []
     for flex in flex_controls:
         story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=flex)
         output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
-        # output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
-        # output_argmax = [[ind for ind in torch.argmax(summary, dim=1)] for summary in output]        
+        output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
+        outputs.append(output_to_rouge)
         flex_results.append(control_evl_fn(output, batch.summary, story, txt_field))
-    return output_to_rouge, native_results, flex_results
+        
+    return outputs, native_results, flex_results
 
 def evalutate_on_length(output, summary, story, txt_field):
     output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
@@ -180,24 +183,6 @@ def evalutate_on_length(output, summary, story, txt_field):
     eos_idx = txt_field.vocab.stoi['<eos>']
     length_outputs = [len(out.split(' ')) for out in output_to_rouge]
     length_summary = [len(summary.split(' ')) for summary in summary_to_rouge]
-    # for out in output:
-    #     length = 0
-    #     for ind in output:
-    #         if ind == sos_idx:
-    #             continue
-    #         if ind == eos_idx:
-    #             break
-    #         length += 1
-    #     length_outputs.append(length)
-    # for summ in summary:
-    #     length = 0
-    #     for ind in summ:
-    #         if ind == sos_idx:
-    #             continue
-    #         if ind == eos_idx:
-    #             break
-    #         length += 1
-    #     length_summary.append(length)
     return {'output': length_outputs, 'summary': length_summary}
 
 def test_on_length(model, batch, txt_field, len_tokens, device):
@@ -412,7 +397,8 @@ def train():
     recursion_count = 0    
 
     if args.test:
-        rouge_scores = None
+        rouge_for_all = [None for i in range(len(len_tokens))]
+
         batch_count = 0
         length_performance = [0 for i in range(len(len_tokens))]
         with model.eval() and torch.no_grad():
@@ -421,31 +407,26 @@ def train():
                 
                 story, summary_to_rouge, _, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds)
                 
-                # start = time.time()
-                # output = model.inference(story.to(device) , sos_idx, eos_idx)
-                # end = time.time()
-                # logger.info(f'finished one pass in {end-start} seconds.')
-
-                # output = torch.tensor([output['beam_' + str(abs(i))][b] for b, i in enumerate(beams)])
-                # output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output]
-
                 start = time.time()
-                output_to_rouge, batch_lengths = test_on_length(model, batch, txt_field, len_tokens, device)
+                outputs, batch_lengths = test_on_length(model, batch, txt_field, len_tokens, device)
                 end = time.time()
                 logger.info(f'finished one length test in {end-start} seconds.')
 
                 length_performance = [all_len+ind_len for all_len, ind_len in zip(length_performance, batch_lengths)]
                 total_length_performance = [l/batch_count for l in length_performance]
-                rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores)
-                
+                for i, r in enumerate(rouge_for_all):
+                    rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, outputs[i], rouge, r)
+                    rouge_for_all[i] = r  
                 if no % 50 == 0:
                     logger.info(f'Processed {no+1} batches.')
-                    logger.info(summary_to_rouge)
-                    logger.info(output_to_rouge)
+                    # logger.info(summary_to_rouge)
+                    # logger.info(output_to_rouge)
                     logger.info(f'Length performance: {total_length_performance}')
+                    logger.info(f'True summary: {summary_to_rouge[0]}')
+                    for i, lt in enumerate(len_tokens):
+                        logger.info(f'Length category {lt}, output: {outputs[i]}')
                     # logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
-                assert 1 == 2
             rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
             logger.info(f'Test rouge: {rouge_scores}.')
             logger.info(f'Length performance: {total_length_performance}')

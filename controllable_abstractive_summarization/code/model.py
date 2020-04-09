@@ -144,7 +144,7 @@ class ControllableSummarizer(nn.Module):
                     for j in range(beam_width):
                         trg_idx['beam_' + str(j)][b] = trg_idx['beam_' + str(j)][b] + [self.padding_idx]
             if sum(batch_complete) == len(batch_complete):
-                print('finished early')
+                # print('finished early')
                 return_idx = [trg_idx['beam_' + str(beam_for_batch[i])][i] for i in range(batch_size)]
                 return return_idx
         return_idx = [trg_idx['beam_' + str(beam_for_batch[i])][i] for i in range(batch_size)]
