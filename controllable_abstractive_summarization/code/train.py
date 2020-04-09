@@ -445,7 +445,6 @@ def train():
                     logger.info(f'Length performance: {total_length_performance}')
                     # logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
-                assert 1 == 2
             rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
             logger.info(f'Test rouge: {rouge_scores}.')
             logger.info(f'Length performance: {total_length_performance}')
