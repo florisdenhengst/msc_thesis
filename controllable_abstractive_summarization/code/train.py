@@ -176,7 +176,7 @@ def test_on_control(model, batch, txt_field, native_controls, flex_controls, con
         
     return outputs, native_results, flex_results
 
-def evalutate_on_length(output, summary, story, txt_field):
+def evaluate_on_length(output, summary, story, txt_field):
     output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
     summary_to_rouge, _ = prepare_summaries(summary, txt_field)
     sos_idx = txt_field.vocab.stoi['<sos>']
@@ -190,7 +190,7 @@ def test_on_length(model, batch, txt_field, len_tokens, device):
     flex_controls = []
     for token in len_tokens:
         flex_controls.append([token for i in range(len(batch.length_tokens))])
-    output_to_rouge, native_results, flex_results = test_on_control(model, batch, txt_field, native_controls, flex_controls, 'length', evalutate_on_length, device)
+    output_to_rouge, native_results, flex_results = test_on_control(model, batch, txt_field, native_controls, flex_controls, 'length', evaluate_on_length, device)
     length_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
 
     return output_to_rouge, length_performance
@@ -397,6 +397,7 @@ def train():
     recursion_count = 0    
 
     if args.test:
+        test_rouge = None
         rouge_for_all = [None for i in range(len(len_tokens))]
 
         batch_count = 0
@@ -414,21 +415,23 @@ def train():
 
                 length_performance = [all_len+ind_len for all_len, ind_len in zip(length_performance, batch_lengths)]
                 total_length_performance = [l/batch_count for l in length_performance]
+                test_rouge, temp_scores = calculate_rouge(summary_to_rouge, outputs[0], rouge, test_rouge)
                 for i, r in enumerate(rouge_for_all):
-                    rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, outputs[i], rouge, r)
-                    rouge_for_all[i] = r  
-                if no % 50 == 0:
+                    rouge_scores, _ = calculate_rouge(summary_to_rouge, outputs[i+1], rouge, r)
+                    rouge_for_all[i] = rouge_scores  
+                if no % 10 == 0:
                     logger.info(f'Processed {no+1} batches.')
-                    # logger.info(summary_to_rouge)
-                    # logger.info(output_to_rouge)
                     logger.info(f'True summary: {summary_to_rouge[0]}')
                     for i, lt in enumerate(len_tokens):
-                        logger.info(f'Length category {lt}, output: {outputs[i][0]}')
+                        logger.info(f'Length category {lt}, output: {outputs[i+1][0]}')
                     # logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Length performance: {total_length_performance}')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
-            rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
-            logger.info(f'Test rouge: {rouge_scores}.')
+            logger.info(f'Processed {batch_count} batches.')
+            for i, r in enumerate(rouge_for_all):
+                rouge_for_all[i] = {key: {metric: float(r[key][metric]/batch_count) for metric in r[key].keys()} for key in r.keys()}
+            test_rouge = {key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}
+            logger.info(f'Test rouge: {test_rouge}.')
             logger.info(f'Length performance: {total_length_performance}')
 
     else:
