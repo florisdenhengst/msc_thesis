@@ -121,10 +121,6 @@ class ControllableSummarizer(nn.Module):
                 iter_probs.append(beam_probs[beam] + torch.log(next_probs))
 
             iter_probs = torch.stack(iter_probs)
-            print(beam_probs)
-            print(beam_probs[beam].shape)
-            print(iter_probs)
-            print(iter_probs.shape)
             tmp_probs = torch.stack([torch.stack([iter_probs[i][j] for i in range(iter_probs.shape[0])]).flatten() for j in range(iter_probs.shape[1])])
             iter_idx = torch.topk(tmp_probs, k=beam_width, dim=1)[1]
             x, y = [], []
@@ -146,8 +142,6 @@ class ControllableSummarizer(nn.Module):
                         trigrams['beam_' + str(j)][b], beam_continue = check_for_trigram(int(iter_tokens[x[b][j]][b,y[b][j]]), tmp_trigrams['beam_' + str(int(x[b][j]))][b])
                         trg_idx['beam_' + str(j)][b] = tmp_idx['beam_' + str(int(x[b][j]))][b] + [int(iter_tokens[x[b][j]][b,y[b][j]])]
                         beam_probs['beam_' + str(j)][b] = iter_probs[x[b][j]][b, y[b][j]] - 100*(1-int(beam_continue))
-                        print(beam_probs['beam_' + str(j)][b])
-                        print(beam_continue)
                         if int(iter_tokens[x[b][j]][b,y[b][j]]) == eos_idx:
                             batch_complete[b] = True
                             beam_for_batch[b] = j
@@ -157,7 +151,6 @@ class ControllableSummarizer(nn.Module):
             if sum(batch_complete) == len(batch_complete):
                 # print('finished early')
                 return_idx = [trg_idx['beam_' + str(beam_for_batch[i])][i] for i in range(batch_size)]
-                assert 1 == 2
                 return return_idx
         return_idx = [trg_idx['beam_' + str(beam_for_batch[i])][i] for i in range(batch_size)]
         return return_idx
