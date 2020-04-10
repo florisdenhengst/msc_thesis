@@ -149,7 +149,6 @@ def prepare_summaries(summary, txt_field, output=False):
 
 
 def prepare_story_for_control_test(stories, txt_field, control, control_codes=None, ent_tensor=None):
-
     if control != 'entities':
         ctrl_tensor = torch.tensor([txt_field.vocab.stoi[code] for code in control_codes]).unsqueeze(dim=1)
     else:
@@ -160,12 +159,20 @@ def prepare_story_for_control_test(stories, txt_field, control, control_codes=No
 
 def test_on_control(model, batch, txt_field, native_controls, flex_controls, control, control_evl_fn, device):
     outputs = []
+
+    # Inference on input w/o control code
+    output = model.inference(batch.stories.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
+    output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
+    outputs.append(output_to_rouge)
+
+    # Inference on input with native control code
     story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=native_controls)
     output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
     output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
     outputs.append(output_to_rouge)
     native_results = control_evl_fn(output, batch.summary, story, txt_field)
 
+    # Inference on input over all control codes
     flex_results = []
     for flex in flex_controls:
         story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=flex)
@@ -398,6 +405,7 @@ def train():
 
     if args.test:
         test_rouge = None
+        no_control_rouge = None
         rouge_for_all = [None for i in range(len(len_tokens))]
 
         batch_count = 0
@@ -415,23 +423,31 @@ def train():
 
                 length_performance = [all_len+ind_len for all_len, ind_len in zip(length_performance, batch_lengths)]
                 total_length_performance = [l/batch_count for l in length_performance]
-                test_rouge, temp_scores = calculate_rouge(summary_to_rouge, outputs[0], rouge, test_rouge)
+
+                no_control_rouge, _  = calculate_rouge(summary_to_rouge, outputs[0], rouge, no_control_rouge)
+                test_rouge, temp_scores = calculate_rouge(summary_to_rouge, outputs[1], rouge, test_rouge)
+
                 for i, r in enumerate(rouge_for_all):
-                    rouge_scores, _ = calculate_rouge(summary_to_rouge, outputs[i+1], rouge, r)
+                    rouge_scores, _ = calculate_rouge(summary_to_rouge, outputs[i+2], rouge, r)
                     rouge_for_all[i] = rouge_scores  
                 if no % 10 == 0:
                     logger.info(f'Processed {no+1} batches.')
                     logger.info(f'True summary: {summary_to_rouge[0]}')
                     for i, lt in enumerate(len_tokens):
-                        logger.info(f'Length category {lt}, output: {outputs[i+1][0]}')
+                        logger.info(f'Length category {lt}, output: {outputs[i+2][0]}')
                     # logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Length performance: {total_length_performance}')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
             logger.info(f'Processed {batch_count} batches.')
             for i, r in enumerate(rouge_for_all):
                 rouge_for_all[i] = {key: {metric: float(r[key][metric]/batch_count) for metric in r[key].keys()} for key in r.keys()}
+                logger.info(f'Rouge on test set, controls {len_tokens[i]}: {rouge_for_all[i]}.')
+            
             test_rouge = {key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}
-            logger.info(f'Test rouge: {test_rouge}.')
+            no_control_rouge = {key: {metric: float(no_control_rouge[key][metric]/batch_count) for metric in no_control_rouge[key].keys()} for key in no_control_rouge.keys()}
+            logger.info(f'Rouge on test set, native controls: {test_rouge}.')
+            logger.info(f'Rouge on test set, no controls: {test_rouge}.')
+
             logger.info(f'Length performance: {total_length_performance}')
 
     else:
