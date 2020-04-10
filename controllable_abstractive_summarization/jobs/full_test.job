@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH --time=30:00:00
+#SBATCH --time=47:00:00
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
 #SBATCH -C TitanX
@@ -9,4 +9,4 @@ git pull
 source activate venv_train
 module load opencl-nvidia/9.0
 
-srun python3 code/train.py --share_weights --full_train --test --batch_size=15 --self_attention
+srun python3 code/train.py --share_weights --full_train --test --batch_size=25 --self_attention
