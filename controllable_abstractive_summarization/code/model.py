@@ -127,10 +127,15 @@ class ControllableSummarizer(nn.Module):
             print(iter_probs.shape)
             tmp_probs = torch.stack([torch.stack([iter_probs[i][j] for i in range(iter_probs.shape[0])]).flatten() for j in range(iter_probs.shape[1])])
             iter_idx = torch.topk(tmp_probs, k=beam_width, dim=1)[1]
-            
-            x = [idx // beam_width for idx in iter_idx]
-            y = [idx % beam_width for idx in iter_idx]
-            
+            x, y = []
+            for i, line_prob in enumerate(tmp_probs):
+               unique_probs, unique_ids = torch.unique(line_prob, return_inverse=True)
+               topk_probs, topk_ids = torch.topk(unique_probs, k=beam_width)
+               x.append([idx // beam_width for idx in unique_ids[topk_ids]])
+               y.append([idx % beam_width for idx in unique_ids[topk_ids]])
+
+            # x = [idx // beam_width for idx in iter_idx]
+            # y = [idx % beam_width for idx in iter_idx]
             
             tmp_idx = copy.deepcopy(trg_idx)
             tmp_trigrams = copy.deepcopy(trigrams)
