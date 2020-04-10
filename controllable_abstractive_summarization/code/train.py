@@ -446,7 +446,7 @@ def train():
             test_rouge = {key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}
             no_control_rouge = {key: {metric: float(no_control_rouge[key][metric]/batch_count) for metric in no_control_rouge[key].keys()} for key in no_control_rouge.keys()}
             logger.info(f'Rouge on test set, native controls: {test_rouge}.')
-            logger.info(f'Rouge on test set, no controls: {test_rouge}.')
+            logger.info(f'Rouge on test set, no controls: {no_control_rouge}.')
 
             logger.info(f'Length performance: {total_length_performance}')
 
