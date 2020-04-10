@@ -152,16 +152,14 @@ class ControllableSummarizer(nn.Module):
 
 
 def check_for_trigram(new_token, trigrams):
-        
-        if len(trigrams) >= 3:
-            trigrams.append(trigrams[-2:] + [new_token])
+        if len(trigrams) == 0:
+                trigrams.append([new_token])  
+        elif len(trigrams[0]) < 3:
+            trigrams[0] = trigrams[0] + [new_token]
+        else:
+            trigrams.append(trigrams[-1][1:] + [new_token])
             if trigrams.count(trigrams[-1]) > 1:
                 return trigrams, False
-        elif len(trigrams) == 0:
-            # print(new_token.tolist())
-            trigrams.append([new_token])  
-        else:
-            trigrams[0] = trigrams[0] + [new_token]
         return trigrams, True
 
 class ConvEncoder(nn.Module):

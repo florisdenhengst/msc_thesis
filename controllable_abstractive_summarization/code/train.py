@@ -421,11 +421,11 @@ def train():
                     logger.info(f'Processed {no+1} batches.')
                     # logger.info(summary_to_rouge)
                     # logger.info(output_to_rouge)
-                    logger.info(f'Length performance: {total_length_performance}')
                     logger.info(f'True summary: {summary_to_rouge[0]}')
                     for i, lt in enumerate(len_tokens):
                         logger.info(f'Length category {lt}, output: {outputs[i]}')
                     # logger.info(f'Average loss: {epoch_loss / no}.')
+                    logger.info(f'Length performance: {total_length_performance}')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
             rouge_scores = {key: {metric: float(rouge_scores[key][metric]/batch_count) for metric in rouge_scores[key].keys()} for key in rouge_scores.keys()}
             logger.info(f'Test rouge: {rouge_scores}.')
