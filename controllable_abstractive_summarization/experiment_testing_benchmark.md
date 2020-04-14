@@ -26,7 +26,10 @@ The dataset used for the experiments is CNN / Daily Mail, consisting of pairs of
 
 To achieve the finishing condition (val loss < 2e-4), it took 21 epochs and approximately 48 hours of training. The train and model losses in the figure below. The ROUGE score on the validation set by the end of training is ROUGE-1: 0.6780, ROUGE-2: 0.2849, ROUGE-L: 0.6538; those are obtained with teacher forcing and therefore are not representative of the models independent inference ability. 
 
-![](./train_test_plots/train_val_loss.png)
+<p align="center">
+  <img src="./train_test_plots/train_val_loss.png" alt="train-validation-loss"/>
+</p>
+<!--![](./train_test_plots/train_val_loss.png)-->
 
 # Testing without teacher forcing and enforcing length control
 To evaluate the inference capacity of the trained model, we run inference on the test set without teacher forcing, i.e. the model does not have access to ground truth at inference time. We also test the capacity of the model at enforcing length control.
