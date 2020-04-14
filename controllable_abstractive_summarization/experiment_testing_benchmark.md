@@ -19,15 +19,13 @@ The dataset used for the experiments is CNN / Daily Mail, consisting of pairs of
 * Train set: 287741, validation set: 10,923, test set: 13,420
 * Vocab size under BPE (=output dim): 19,423
 * **Stories**:
-* * Mean sentence length (in BPE tokens): xxx
-* * Minimum length: yyy
 * * Maximum length: 6078
 * **Summaries**:
-* * Mean sentence length (in BPE tokens): xxx
-* * Minimum length: yyy
+* * Mean sentence length (in BPE tokens): 59.88
 * * Maximum length: 681
 
-To achieve the finishing condition (val loss < 2e-4), it took XX epochs and approximately YY hours of training. The train and model losses in the figure below. The ROUGE score on the validation set by the end of training is ROUGE-1: x, ROUGE-2: y, ROUGE-L: z; those are obtained with teacher forcing and therefore are not representative of the models independent inference abiity. 
+To achieve the finishing condition (val loss < 2e-4), it took 21 epochs and approximately 48 hours of training. The train and model losses in the figure below. The ROUGE score on the validation set by the end of training is ROUGE-1: 0.6780, ROUGE-2: 0.2849, ROUGE-L: 0.6538; those are obtained with teacher forcing and therefore are not representative of the models independent inference ability. 
+
 ![](./train_test_plots/train_val_loss.png)
 
 # Testing without teacher forcing and enforcing length control
@@ -36,22 +34,22 @@ To evaluate the inference capacity of the trained model, we run inference on the
 More specifically, during training the model was exposed to one out of 10 length control codes, *<lenX>*, with values of X from 1 to 10. Each code indicates how long the ground truth summary is, where *<len1>* corresponds to shortest and *<len10>* corresponds to longest category. In this way, the model is exposed to the length codes during training and hopefully learns to generalize and adjust the inferred summaries based on any length code. 
 
 Testing the model without teacher forcing and any control codes, therefore omitting the *<lenX>* feature, leads to the following performance: 
-* ROUGE-1: 0.3535508611196843,
-* ROUGE-2: 0.11434026073538124,
-* ROUGE-L: 0.32862578946705323.
+* ROUGE-1: 0.3535
+* ROUGE-2: 0.1143
+* ROUGE-L: 0.3286
 
 Including the *native* length code, however, leads to decreased ROUGE performance. Here, native indicates the length code of the ground-truth summary, even though the model does not have access to the text itself at inference time. The following is the performance:
-* ROUGE-1: 0.311229114568002
-* ROUGE-2: 0.09643872556356127,
-* ROUGE-L: 0.2880371638264249.
+* ROUGE-1: 0.3112
+* ROUGE-2: 0.0964
+* ROUGE-L: 0.2880
 
 Finally, to test if the model succeeds at enforcing control over length, every summary in the test set was passed through the model 10 times, once for every different length code. Having done this on all samples, we obtain the average summary length as well as ROUGE performance per length category. 
 ![](./train_test_plots/test_length_control.png)
 
 Notably, wrt ROUGE, the best performance is achieved with <len10> control code. This comes both as a surprise and not. It is surprising to see that a single discrete feature can boost the performance; however, it is also obvious that it might boost the ROUGE metric, since calculates recall rather than precision between the generated summary and ground truth. Therefore, as the model makes longer predictions, it has a higher chance of including text that is also present in the target. 
-* ROUGE-1: 0.37297935930700393
-* ROUGE-2: 0.12235564163585153,
-* ROUGE-L: 0.3464931129942566.
+* ROUGE-1: 0.3729
+* ROUGE-2: 0.1224
+* ROUGE-L: 0.3465
 
 Some sample responses, on smallest and largest length code, as produced on the test set without teacher forcing:  
 * **Ground truth:** Damning 400 page report says @entity2 profited ' unethically ' from public funds. The report also mentions that he did this by accident. The extensions to his compound included a ' fire pool ' and a helipad. Many neighbors were moved out of the area to make way for extensions. @entity3 president @entity2 must now pay the money back
