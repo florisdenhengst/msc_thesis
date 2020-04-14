@@ -29,7 +29,6 @@ To achieve the finishing condition (val loss < 2e-4), it took 21 epochs and appr
 <p align="center">
   <img src="./train_test_plots/train_val_loss.png" alt="train-validation-loss"/>
 </p>
-<!--![](./train_test_plots/train_val_loss.png)-->
 
 # Testing without teacher forcing and enforcing length control
 To evaluate the inference capacity of the trained model, we run inference on the test set without teacher forcing, i.e. the model does not have access to ground truth at inference time. We also test the capacity of the model at enforcing length control.
@@ -47,7 +46,10 @@ Including the *native* length code, however, leads to decreased ROUGE performanc
 * ROUGE-L: 0.2880
 
 Finally, to test if the model succeeds at enforcing control over length, every summary in the test set was passed through the model 10 times, once for every different length code. Having done this on all samples, we obtain the average summary length as well as ROUGE performance per length category. 
-![](./train_test_plots/test_length_control.png)
+
+<p align="center">
+  <img src="./train_test_plots/test_length_control.png" alt="length-control-test"/>
+</p>
 
 Notably, wrt ROUGE, the best performance is achieved with <len10> control code. This comes both as a surprise and not. It is surprising to see that a single discrete feature can boost the performance; however, it is also obvious that it might boost the ROUGE metric, since calculates recall rather than precision between the generated summary and ground truth. Therefore, as the model makes longer predictions, it has a higher chance of including text that is also present in the target. 
 * ROUGE-1: 0.3729
