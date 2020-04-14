@@ -1,5 +1,8 @@
-# Training the model
-The trained model is closely following the implementation by Fan et al., 2017. Namely, the model and the training pipeline are as follows:
+# Training the controllable abstractive summarization model
+In this document, the experimental reproduction of model and results outlined by Fan et al. (2017) is presented. The architecture follows the authors' original, and the main task is abstractive text summarization with the capacity to enforce control over non-textual features. 
+
+First, we describe the model architecture and the training procedure:
+* Seq2Seq model
 * CNN-based encoder and decoder, kernel size 1x3
 * 8 layers each in encoder and decoder
 * Vocab-embed layers shared between encoder and decoder (*"we share representation of tokens in encoder and decoder embeddings"*, Fan et. al, 2017)
@@ -14,7 +17,7 @@ The trained model is closely following the implementation by Fan et al., 2017. N
 * Decaying learning rate; decrease by magnitude 10 if val loss not decreasing
 * Stop training if learning rate <2e-4
 
-The dataset used for the experiments is CNN / Daily Mail, consisting of pairs of input news stories and output summaries. Dataset statistics are as follows: 
+The dataset used for the experiments is entity-anonymized CNN / Daily Mail, the same as in the original version, consisting of pairs of input news stories and output summaries. Dataset statistics are as follows: 
 
 * Train set: 287741, validation set: 10,923, test set: 13,420
 * Vocab size under BPE (=output dim): 19,423
@@ -60,3 +63,6 @@ Some sample responses, on smallest and largest length code, as produced on the t
 * **Ground truth:** Damning 400 page report says @entity2 profited ' unethically ' from public funds. The report also mentions that he did this by accident. The extensions to his compound included a ' fire pool ' and a helipad. Many neighbors were moved out of the area to make way for extensions. @entity3 president @entity2 must now pay the money back
 * **Length category *len1*:**  @entity3 president @entity2 was booing a sponalion at his private residence in december. The 71 year old leader was booed with thousands at memorial service for the 71-year-old president. He must repay part and will repay the costs the 400 pages
 * **Length category *len10*:**  @entity3 government ordered 400 pages of a $20million refurbishment. @entity3 government says the 'inferonability' is 'unconscionable and excessive misappropriation of public funds'. The report has sparked massive resentment and has been ordered to rerepay part. The 71 years old president was booed spontaneously by thousands of mourners at a memorial service for @entity26 , last december.
+
+
+Fan, A., Grangier, D., & Auli, M. (2017). Controllable abstractive summarization. arXiv preprint arXiv:1711.05217.
