@@ -29,15 +29,15 @@ After applying BPE and cutting summaries over threshold length, length statistic
 2. Produce BPE codes for encoding over the original dataset
 3. Go over the all strings in the dataset to compute the a dictionary of special UNICODE characters and their frequency of occurence in tokens
 4. Go over every sample in the dataset: 
-* * Read the string and tokenize it based on the provided mapping file 
-* * Replace entities with the placeholders based on the token indices and provided entity file 
-* * Replace special UNICODE characters with the ASCII equivalent that appear more than 50 times; otherwise delete token
-* * Separate the tokens into input, i.e. news article, and target, i.e. summaries. 
-* * Compute the length of input and target in number of tokens 
-* * Cut the input at 400 tokens 
-* * Encode using BPE 
-* * Decode entity placeholders from BPE
-* * Write the input, target, style category (CNN or DM), entity mappings and length of summary to a tabular file
+* 4a. Read the string and tokenize it based on the provided mapping file 
+* 4b. Replace entities with the placeholders based on the token indices and provided entity file 
+* 4c. Replace special UNICODE characters with the ASCII equivalent that appear more than 50 times; otherwise delete token
+* 4d. Separate the tokens into input, i.e. news article, and target, i.e. summaries. 
+* 4e. Compute the length of input and target in number of tokens 
+* 4f. Cut the input at 400 tokens 
+* 4g. Encode using BPE 
+* 4h. Decode entity placeholders from BPE
+* 4i. Write the input, target, style category (CNN or DM), entity mappings and length of summary to a tabular file
 5. Divide summary lengths into 10 evenly sized categories, assigning a *lenY* token, where Y is a natural number such that 1<=Y<=10
 6. Go over rows in the tabular file and append the length code to each sample based on the mapping obtained in step 4
 
