@@ -21,11 +21,6 @@ The dataset used for the experiments is entity-anonymized CNN / Daily Mail, the 
 
 * Train set: 287741, validation set: 10,923, test set: 13,420
 * Vocab size under BPE (=output dim): 19,423
-* **Stories**:
-* * Maximum length: 6078
-* **Summaries**:
-* * Mean sentence length (in BPE tokens): 59.88
-* * Maximum length: 681
 
 To achieve the finishing condition (val loss < 2e-4), it took 21 epochs and approximately 48 hours of training. The train and model losses in the figure below. The ROUGE score on the validation set by the end of training is ROUGE-1: 0.6780, ROUGE-2: 0.2849, ROUGE-L: 0.6538; those are obtained with teacher forcing and therefore are not representative of the models independent inference ability. 
 
@@ -34,6 +29,7 @@ To achieve the finishing condition (val loss < 2e-4), it took 21 epochs and appr
 </p>
 
 # Testing without teacher forcing and enforcing length control
+### Performance on test set
 To evaluate the inference capacity of the trained model, we run inference on the test set without teacher forcing, i.e. the model does not have access to ground truth at inference time. We also test the capacity of the model at enforcing length control.
 
 More specifically, during training the model was exposed to one out of 10 length control codes, *lenX*, with values of X from 1 to 10. Each code indicates how long the ground truth summary is, where *len1* corresponds to shortest and *len10* corresponds to longest category. In this way, the model is exposed to the length codes during training and hopefully learns to generalize and adjust the inferred summaries based on any length code. 
@@ -46,7 +42,20 @@ Testing the model without teacher forcing and any control codes, therefore omitt
 Including the *native* length code, however, leads to decreased ROUGE performance. Here, native indicates the length code of the ground-truth summary, even though the model does not have access to the text itself at inference time. The following is the performance:
 * ROUGE-1: 0.3112
 * ROUGE-2: 0.0964
-* ROUGE-L: 0.2880
+* ROUGE-L: 0.2880.
+While it is unclear why this occurs and contrasts the results reported in the original research, one hypothesis lies in the performance of the model on shorter length categories. Specifically, for conditioning on length code *len1* at test time for *all* samples leads to the following performance:
+* ROUGE-1: 0.22927753521653096
+* ROUGE-2: 0.06689455918110279
+* ROUGE-L: 0.21155107748009144,
+which is considerably lower than the performance without native codes. Since the dataset was split into 10 even length categories, each containing the same number of samples, it suggests that for summaries whose true summary is longer than minimum *len1* conditioning worsens the performance. However, the reverse holds as well: best performance is achieved with *len10* control code. This comes both as a surprise and not. It is surprising to see that a single discrete feature can boost the performance; however, it is also obvious that it might boost ROUGE, since the metric calculates recall rather than precision between the generated summary and ground truth. Therefore, as the model makes longer predictions, it has a higher chance of including text that is also present in the target:
+* ROUGE-1: 0.3729
+* ROUGE-2: 0.1224
+* ROUGE-L: 0.3465
+
+To return to the question of worse performance on native controls, we can average the performance over all length categories and see how close the values is in this case. If short codes length codes restrict the model performance even for samples whose ground truth length is low, then the performance comes as no surprise. **TODO**
+
+
+### Length control performance
 
 Finally, to test if the model succeeds at enforcing control over length, every summary in the test set was passed through the model 10 times, once for every different length code. Having done this on all samples, we obtain the average summary length as well as ROUGE performance per length category. The following plot shows that the model indeed learns to write shorter or longer summaries based on the length control code:
 
@@ -54,10 +63,6 @@ Finally, to test if the model succeeds at enforcing control over length, every s
   <img src="./train_test_plots/test_length_control.png" alt="length-control-test"/>
 </p>
 
-As for the ROUGE evaluation, the best performance is achieved with *len10* control code. This comes both as a surprise and not. It is surprising to see that a single discrete feature can boost the performance; however, it is also obvious that it might boost the ROUGE metric, since calculates recall rather than precision between the generated summary and ground truth. Therefore, as the model makes longer predictions, it has a higher chance of including text that is also present in the target. 
-* ROUGE-1: 0.3729
-* ROUGE-2: 0.1224
-* ROUGE-L: 0.3465
 
 Some sample responses, on smallest and largest length code, as produced on the test set without teacher forcing:  
 * **Ground truth:** Damning 400 page report says @entity2 profited ' unethically ' from public funds. The report also mentions that he did this by accident. The extensions to his compound included a ' fire pool ' and a helipad. Many neighbors were moved out of the area to make way for extensions. @entity3 president @entity2 must now pay the money back
