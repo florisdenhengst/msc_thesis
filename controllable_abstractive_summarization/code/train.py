@@ -204,11 +204,17 @@ def test_on_length(model, batch, txt_field, len_tokens, device):
 
     return output_to_rouge, length_performance
 
-def get_summary_sentiment_codes(summaries):
+def get_summary_sentiment_codes(summaries, txt_field):
     sid = SentimentIntensityAnalyzer()
+    remove_tokens = ['<sos>', '<eos>', '<pad>']
     sentiment_codes = []
     for summary in summaries:
-        summary = summary.replace('@@ ', '')
+        tmp = []
+        for ind in summary:
+            if txt_field.vocab.itos[ind] not in remove_tokens:
+                tmp.append(txt_field.vocab.itos[ind])
+        summary = ' '.join(tmp).replace('@@ ', '')
+
         sentiment = sid.polarity_scores(summary)['compound']
         if sentiment > 0.05:
             sentiment_codes.append('<pos>')
@@ -232,7 +238,7 @@ def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds):
     src_codes = ['<' + txt_nonseq_field.vocab.itos[src_ind] + '>' for src_ind in batch.source]
     story = prepare_story_for_control_test(story, txt_field, control='source', control_codes=src_codes)
 
-    sent_codes = get_summary_sentiment_codes(batch.summaries)
+    sent_codes = get_summary_sentiment_codes(batch.summary, txt_field)
     story = prepare_story_for_control_test(story, txt_field, control='sentiment', control_codes=sent_codes)
 
     return story, summary_to_rouge, summary_to_pass, lead_3
