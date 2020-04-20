@@ -23,6 +23,8 @@ from data_preprocess import anonymize_and_bpe_data, MyIterator, batch_size_fn
 from artificial_data_preprocess import Synthetic
 from model import ControllableSummarizer
 
+from nltk.sentiment.vader import SentimentIntensityAnalyzer, SentiText
+
 EMB_DIM = 340 # from paper 
 HID_DIM = 512 # from paper
 N_LAYERS = 8 # from paper
@@ -202,7 +204,19 @@ def test_on_length(model, batch, txt_field, len_tokens, device):
 
     return output_to_rouge, length_performance
 
-
+def get_summary_sentiment_codes(summaries):
+    sid = SentimentIntensityAnalyzer()
+    sentiment_codes = []
+    for summary in summaries:
+        summary = summary.replace('@@ ', '')
+        sentiment = sid.polarity_scores(summary)['compound']
+        if sentiment > 0.05:
+            sentiment_codes.append('<pos>')
+        elif sentiment < -0.05:
+            sentiment_codes.append('<neg>')
+        else:
+            sentiment_codes.append('<neu>')
+    return sentiment_codes
 
 def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds):
     lead_3 = get_lead_3(batch.stories, txt_field, sent_end_inds) 
@@ -213,10 +227,13 @@ def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds):
     story = prepare_story_for_control_test(batch.stories, txt_field, control='entities', ent_tensor=ent_tensor)
 
     len_codes = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
-    story = prepare_story_for_control_test(batch.stories, txt_field, control='length', control_codes=len_codes)
+    story = prepare_story_for_control_test(story, txt_field, control='length', control_codes=len_codes)
 
     src_codes = ['<' + txt_nonseq_field.vocab.itos[src_ind] + '>' for src_ind in batch.source]
-    story = prepare_story_for_control_test(batch.stories, txt_field, control='source', control_codes=src_codes)
+    story = prepare_story_for_control_test(story, txt_field, control='source', control_codes=src_codes)
+
+    sent_codes = get_summary_sentiment_codes(batch.summaries)
+    story = prepare_story_for_control_test(story, txt_field, control='sentiment', control_codes=sent_codes)
 
     return story, summary_to_rouge, summary_to_pass, lead_3
 
@@ -353,9 +370,13 @@ def train():
         with open(Path(save_model_path, 'vocab_itos.pkl'), 'wb') as file:
             pickle.dump(txt_field.vocab.itos, file)    
 
+    logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary before adding control codes.')
+
     len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
     source_tokens = ['<cnn>', '<dailymail>']
-    txt_field = add_tokens_to_vocab(txt_field, len_tokens+source_tokens)
+    sentiment_tokens = ['<pos>', '<neg>', '<neu>']
+    txt_field = add_tokens_to_vocab(txt_field, len_tokens+source_tokens+sentiment_tokens)
+    logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary after adding control codes.')
 
     padding_idx = txt_field.vocab.stoi[txt_field.pad_token]
     sos_idx = txt_field.vocab.stoi['<sos>']
@@ -414,7 +435,7 @@ def train():
             for no, batch in enumerate(test_iter):
                 batch_count += 1
                 
-                story, summary_to_rouge, _, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds)
+                _, summary_to_rouge, _, _ = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds)
                 
                 start = time.time()
                 outputs, batch_lengths = test_on_length(model, batch, txt_field, len_tokens, device)
