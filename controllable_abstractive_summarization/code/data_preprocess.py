@@ -12,6 +12,8 @@ import re
 import sys
 import itertools
 import spacy 
+import unidecode
+
 from pathlib import Path
 import subword_nmt.apply_bpe as apply_bpe
 import numpy as np
@@ -103,10 +105,9 @@ class CNNDM(Dataset):
         # logger.info(os.path.join(data_path, '/cnn/stories/'))
         # logger.info(os.path.join('.', '/cnn/stories/'))
 
+
         self.cut_off_length = cut_off_length
         self.data_path = data_path
-        # spacy_en = spacy.load("en", disable=["tagger", "parser", "ner"])
-        # self.tokenizer = lambda s: [tok.text for tok in spacy_en.tokenizer(s)]
 
         self.cnn_stories = os.listdir(Path(data_path, 'cnn/stories/'))
         self.dm_stories = os.listdir(Path(data_path, 'dailymail/stories'))
@@ -115,7 +116,19 @@ class CNNDM(Dataset):
         self.sources = []
         self.max_sum_length = 0
         self.cut_stories = 0
+        self.story_length = []
         self.cut_summaries = 0
+        
+        self.word_count = 0
+        self.special_characters_count = 0
+        self.special_characters_distribution = {}
+
+        
+        self.cutoff_frequency = 50
+        self.unicode_detector =  re.compile('[^\x00-\x7F]+')#re.compile(r'\d+')
+        self.decoder = unidecode.unidecode
+        # self.character_detector = re.compile('[A-Za-z]')
+        self.delete_detector = re.compile('Â|â')
 
         if 'cnn' in sources:
             self.stories += self.cnn_stories 
@@ -132,7 +145,7 @@ class CNNDM(Dataset):
 
     def __getitem__(self, idx):
 
-        text, tokenized = self.tokenize(self.stories[idx], self.sources[idx])
+        tokenized = self.tokenize(self.stories[idx], self.sources[idx])
         content, summary, anonymized, sum_len_before = self.anonymize(tokenized, self.stories[idx], self.sources[idx])
         if sum_len_before > self.max_sum_length:
             self.max_sum_length = sum_len_before
@@ -143,6 +156,36 @@ class CNNDM(Dataset):
                         'length_sentences': no_sents, 'source': self.sources[idx], 'entities': anonymized, 
                         'summary': summary}
         return item
+
+    def get_special_char_dict(self, no_samples):
+        i = 0
+        for story_path, source in zip(self.stories, self.sources):
+            i += 1
+            mapping_filename = Path(self.data_path, '%s/tokens/%s.txt' % (source, story_path.split('.')[0]))
+            if not Path.exists(mapping_filename):
+                return None
+
+            mapping = self.loadTokenMapping(mapping_filename)
+            story = open(Path(self.data_path, '%s/stories/%s' % (source, story_path)), 'rb').read()
+            for (start, end) in mapping:
+                token = story[start:end+1].decode()
+                unc = self.unicode_detector.findall(token)#.encode().decode('utf-8'))
+                if len(unc) > 0: 
+                    self.special_characters_count += 1
+                    if token not in self.special_characters_distribution.keys():
+                        self.special_characters_distribution[token] = 1
+                    else:
+                        self.special_characters_distribution[token] += 1
+                    # if len(self.delete_detector.findall(token)) != 0:
+                    #     logger.info(previous_token)
+                    # if len(self.delete_detector.findall(previous_token)) != 0:
+                    #     logger.info(previous_token)
+                    #     logger.info(token)
+                previous_token = token
+                self.word_count += 1        
+            if no_samples != 0 and i >= no_samples:
+                break
+
 
     def loadTokenMapping(self, filename):
         """Loads a token mapping from the given filename.
@@ -186,14 +229,15 @@ class CNNDM(Dataset):
             return None
 
         mapping = self.loadTokenMapping(mapping_filename)
-        article_processed = True
-        offset = 0
         story = open(Path(self.data_path, '%s/stories/%s' % (source, path)), 'rb').read()
         tokens = []
+        
         for (start, end) in mapping:
-            tokens.append(str(story[start:end+1])[2:-1])
+            token = story[start:end+1].decode()
+            # tokens.append(str(story[start:end+1])[2:-1])
+            tokens.append(token)
 
-        return story, tokens
+        return tokens
 
 
     def loadEntityMapping(self, filename):
@@ -257,13 +301,26 @@ class CNNDM(Dataset):
                 mapping_index += 1
                 i = end + 1
             else:
-                new_tokens.append(tokenized_story[i])
-
+                if tokenized_story[i] in self.special_characters_distribution.keys():
+                    token = ''
+                    if self.special_characters_distribution[tokenized_story[i]] > self.cutoff_frequency:
+                        if len(self.delete_detector.findall(tokenized_story[i])) == 0:
+                            token = self.decoder(tokenized_story[i])
+                        else:
+                            # logger.info(tokenized_story[i])
+                            token = self.decoder(re.sub(self.delete_detector, '', tokenized_story[i]))
+                            # logger.info(token)
+                        # print(token)
+                else:
+                    token = tokenized_story[i]
+                if len(token) > 0:
+                    new_tokens.append(token)
                 i += 1
         new_tokens = ' '.join(new_tokens).split('@ highlight')
         
         content = new_tokens[0]
         len_content = len(content.split(' '))
+        self.story_length.append(len_content)
         if len_content > self.cut_off_length:
             content = ' '.join(content.split(' ')[0:self.cut_off_length])
             self.cut_stories += 1
@@ -271,7 +328,6 @@ class CNNDM(Dataset):
         summary = ' . '.join(new_tokens[1:])
         len_summary = len(summary.split(' '))
         if len_summary > self.cut_off_length:
-            
             summary = ' '.join(summary.split(' ')[0:self.cut_off_length])
             self.cut_summaries += 1
 
@@ -287,7 +343,7 @@ class CNNDM(Dataset):
 
 
 
-def anonymize_and_bpe_data(data_path=Path(Path.cwd().parent, 'data/'), sources=['cnn', 'dailymail'], no_samples=None, cut_off_length=None):
+def anonymize_and_bpe_data(data_path=Path(Path.cwd(), 'data/'), sources=['cnn', 'dailymail'], no_samples=0, cut_off_length=None):
     
     logger.info(f'Loading data from {sources} and BPE codes...')
 
@@ -308,6 +364,11 @@ def anonymize_and_bpe_data(data_path=Path(Path.cwd().parent, 'data/'), sources=[
     
         logger.info(f'Writing to {tmp_name}, and byte pair encoding...')
         writer = csv.DictWriter(tmp_file, fieldnames=processed_data.keys())
+        dataset.get_special_char_dict(no_samples)
+        logger.info(f'{dataset.special_characters_count} unicode special characters words out of {dataset.word_count} words.')
+        logger.info(f'{len(dataset.special_characters_distribution.keys())} unique unicode words, with {sum([count[1] > dataset.cutoff_frequency for count in dataset.special_characters_distribution.items()])} with more than {dataset.cutoff_frequency} occurences.')
+        logger.info(sorted(dataset.special_characters_distribution.items(), key=lambda x: x[1], reverse=True)[0:100])
+
         for no, sample in enumerate(dataset):
             
             def repl(match):
@@ -332,23 +393,29 @@ def anonymize_and_bpe_data(data_path=Path(Path.cwd().parent, 'data/'), sources=[
             writer.writerow(sample)
             if no % 5000 == 0 and no != 0:
                 logger.info(f'Progress: {no}/{len(dataset)} processed.')
+                logger.info(sample['stories'])
+                logger.info(sample['summary'])
             if no_samples is not 0 and no % no_samples == 0 and no != 0:
                 break
     logger.info(sample['stories'])
     logger.info(sample['summary'])
     logger.info(original_summary)
-
+    logger.info('')
     logger.info(f'There are {dataset.cut_stories} out of {no+1} stories over the cutoff length.')
     logger.info(f'There are {dataset.cut_summaries} out of {no+1} summaries over the cutoff length.')
     bins = equal_bin(np.asarray(lengths), 10)
     len_hist = np.histogram(lengths, 10)
+    logger.info('')
     logger.info(f'Maximum summary length is {dataset.max_sum_length}.')
+    logger.info(f'Maximum summary length is {max(lengths)}.')
+    logger.info(f'Mean summary length is {sum(lengths)/len(lengths)}.')    
     logger.info(f'Minimum summary length is {min(lengths)}.')
-    logger.info(f'Min summary length after procecssing is {len_hist[1][0]}.')
-    logger.info(f'{len_hist[0][0]} summaries with min length.')
-    logger.info(f'Max summary length after procecssing is {len_hist[1][9]}.')
-    logger.info(f'{len_hist[0][9]} summaries with max length.')
-
+    logger.info('')
+    logger.info(f'Maximum story length is {max(dataset.story_length)}.')
+    logger.info(f'Mean story length is {sum(dataset.story_length)/len(dataset.story_length)}.')    
+    logger.info(f'Minimum story length is {min(dataset.story_length)}.')
+    logger.info('')
+    
     with open(tmp_name, 'r') as tmp_file, open(csv_name, 'w') as csv_file:
         logger.info(f'Modifying lengths and writing to {csv_name}...')
         reader = csv.DictReader(tmp_file, fieldnames=processed_data.keys())
@@ -393,7 +460,7 @@ if __name__ == '__main__':
                         help='Use cnn data')
     parser.add_argument('--dailymail', action='store_true',
                         help='Use dailymail data')
-    parser.add_argument('--no_samples', type=int, default=5000,
+    parser.add_argument('--no_samples', type=int, default=0,
                         help='number of samples')
 
     args = parser.parse_args()    
