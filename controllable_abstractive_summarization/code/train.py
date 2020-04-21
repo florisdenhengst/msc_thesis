@@ -19,7 +19,7 @@ from collections import Counter
 from rouge import Rouge
 from torchtext.data import Field, TabularDataset, Iterator, BucketIterator
 
-from data_preprocess import anonymize_and_bpe_data, MyIterator, batch_size_fn
+from data_preprocess import anonymize_and_bpe_data#, MyIterator, batch_size_fn
 from artificial_data_preprocess import Synthetic
 from model import ControllableSummarizer
 
