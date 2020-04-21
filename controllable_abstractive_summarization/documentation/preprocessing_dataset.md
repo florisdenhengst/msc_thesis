@@ -13,15 +13,20 @@ As a result of byte-pair-encoding, however, the entity placeholders were split i
 
 To allow for control over length, it is also necessary to divide the corpus into 10 categories based on the summary length. Therefore, we go over the dataset once to keep track of all lengths and divide the resulting list into ten groups, where len1 corresponds to the shortest and len10 to the longest summaries. While saving the entries, we assign a length code to each sample, therefore allowing in the future to exert control over summary length.
 
-After preprocessing, the dataset is saved as a tabular file and fed to an iterator from PyTorch to handle tokenization, batching and padding. When saved, the stories are cut at 400 tokens, which corresponds to , as suggested by Fan et al. (2017); this has to do with the inverted pyramide structure of news articles and the observation that ground-truth summaries rarely contain information taken after the 400 tokens threshold. Original length statistics are as follows:
+After preprocessing, the dataset is saved as a tabular file and fed to an iterator from PyTorch to handle tokenization, batching and padding. When saved, the stories are cut at 400 tokens, as suggested by Fan et al. (2017); this has to do with the inverted pyramide structure of news articles and the observation that ground-truth summaries rarely contain information taken after the 400 tokens threshold and model performance does not improve. Original length statistics are as follows:
 * **Stories**:
-* * Mean story length, in tokens: 766.3280196100421.
-* * Maximum length, in tokens: 6078
+* * Mean story length, in tokens: 766.33
+* * Maximum length, in tokens: 2001
 * **Summaries**:
 * * Mean summary length, in tokens: 59.88
-* * Maximum length, in tokens: 681
+* * Maximum length, in tokens: 681.
 After applying BPE and cutting summaries over threshold length, length statistics are as follows:
-**TODO**
+* **Stories**:
+* * Mean story length, in tokens: 405.85
+* * Maximum length, in tokens: 710
+* **Summaries**:
+* * Mean summary length, in tokens: 57.63
+* * Maximum length, in tokens: 542.
 
 # Pre-processing pipeline
 

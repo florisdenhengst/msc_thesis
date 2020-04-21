@@ -52,7 +52,7 @@ which is considerably lower than the performance without native codes. Since the
 * ROUGE-2: 0.1224
 * ROUGE-L: 0.3465
 
-To return to the question of worse performance on native controls, we can average the performance over all length categories and see how close the values is in this case. If short codes length codes restrict the model performance even for samples whose ground truth length is low, then the performance comes as no surprise. **TODO**
+To return to the question of worse performance on native controls, we can average the performance over all length categories and see how close the values is in this case. If short length codes restrict the model performance even for samples whose ground truth length is low, then the performance comes as no surprise. **TODO**
 
 
 ### Length control performance
@@ -68,6 +68,8 @@ Some sample responses, on smallest and largest length code, as produced on the t
 * **Ground truth:** Damning 400 page report says @entity2 profited ' unethically ' from public funds. The report also mentions that he did this by accident. The extensions to his compound included a ' fire pool ' and a helipad. Many neighbors were moved out of the area to make way for extensions. @entity3 president @entity2 must now pay the money back
 * **Length category *len1*:**  @entity3 president @entity2 was booing a sponalion at his private residence in december. The 71 year old leader was booed with thousands at memorial service for the 71-year-old president. He must repay part and will repay the costs the 400 pages
 * **Length category *len10*:**  @entity3 government ordered 400 pages of a $20million refurbishment. @entity3 government says the 'inferonability' is 'unconscionable and excessive misappropriation of public funds'. The report has sparked massive resentment and has been ordered to rerepay part. The 71 years old president was booed spontaneously by thousands of mourners at a memorial service for @entity26 , last december.
+
+As can be seen here, the model picks up on the same key concepts but the longer summary includes more details and elaborations than the shorter summary. A notable example that works semantically and syntactically in both cases despite the different wording is how the model refers to "thousands" that booed the president. Under *len1* conditioning, the model simply refers to them as "thousands at memorial service", where the *len10* inference specifies that it is "thousands *of mourners* at *a* memorial service", which might be seen as a tautology but nevertheless remains a legitimate addition. 
 
 
 Fan, A., Grangier, D., & Auli, M. (2017). Controllable abstractive summarization. arXiv preprint arXiv:1711.05217.
