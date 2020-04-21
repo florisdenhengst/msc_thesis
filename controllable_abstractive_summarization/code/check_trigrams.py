@@ -5,9 +5,7 @@ def check_for_trigram(new_token, trigrams):
         elif len(trigrams[0]) < 3:
             trigrams[0] = trigrams[0] + [new_token]
         else:
-            # assert 1 == 2
             trigrams.append(trigrams[-1][1:] + [new_token])
-            print(trigrams.count(trigrams[-1]))
             if trigrams.count(trigrams[-1]) > 1:
                 return trigrams, False
         return trigrams, True

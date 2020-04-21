@@ -112,12 +112,12 @@ def count_pads(train_iter, padding_idx):
     st_pads = 0
     sm_pads = 0
     for batch in train_iter:
-        stories_len.append(batch.stories.shape[1])
+        stories_len.append(batch.story.shape[1])
         summaries_len.append(batch.summary.shape[1])
         if args.count_pads:
-            st_all_tokens += batch.stories.shape[0] * batch.stories.shape[1] 
+            st_all_tokens += batch.story.shape[0] * batch.story.shape[1] 
             sm_all_tokens += batch.summary.shape[0] * batch.summary.shape[1] 
-            st_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.stories])
+            st_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.story])
             sm_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.summary])
     if args.count_pads:
         logger.info(f'In stories, pads are {100*st_pads/st_all_tokens} of all tokens.')
@@ -128,7 +128,7 @@ def count_pads(train_iter, padding_idx):
     stories_len.sort(reverse=True)
     logger.info(stories_len[0:5])
     logger.info(f'Maximum length of summary: {max(summaries_len)}.')
-    max_len = max([max(stories_len), max(summaries_len)])
+    max_len = max([max(stories_len), max(summaries_len)])+10
 
     if max_len > 1000:
         sys.setrecursionlimit(max_len + 10)
@@ -163,12 +163,12 @@ def test_on_control(model, batch, txt_field, native_controls, flex_controls, con
     outputs = []
 
     # Inference on input w/o control code
-    output = model.inference(batch.stories.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
+    output = model.inference(batch.story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
     output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
     outputs.append(output_to_rouge)
 
     # Inference on input with native control code
-    story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=native_controls)
+    story = prepare_story_for_control_test(batch.story, txt_field, control=control, control_codes=native_controls)
     output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
     output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
     outputs.append(output_to_rouge)
@@ -177,7 +177,7 @@ def test_on_control(model, batch, txt_field, native_controls, flex_controls, con
     # Inference on input over all control codes
     flex_results = []
     for flex in flex_controls:
-        story = prepare_story_for_control_test(batch.stories, txt_field, control=control, control_codes=flex)
+        story = prepare_story_for_control_test(batch.story, txt_field, control=control, control_codes=flex)
         output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
         output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
         outputs.append(output_to_rouge)
@@ -224,22 +224,25 @@ def get_summary_sentiment_codes(summaries, txt_field):
             sentiment_codes.append('<neu>')
     return sentiment_codes
 
-def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds):
-    lead_3 = get_lead_3(batch.stories, txt_field, sent_end_inds) 
-    
+def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls):
     summary_to_rouge, summary_to_pass = prepare_summaries(batch.summary, txt_field)
-    
-    ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)  
-    story = prepare_story_for_control_test(batch.stories, txt_field, control='entities', ent_tensor=ent_tensor)
 
-    len_codes = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
-    story = prepare_story_for_control_test(story, txt_field, control='length', control_codes=len_codes)
+    if 'entities' in controls:
+        lead_3 = get_lead_3(batch.story, txt_field, sent_end_inds)     
+        ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)  
+        story = prepare_story_for_control_test(batch.story, txt_field, control='entities', ent_tensor=ent_tensor)
 
-    src_codes = ['<' + txt_nonseq_field.vocab.itos[src_ind] + '>' for src_ind in batch.source]
-    story = prepare_story_for_control_test(story, txt_field, control='source', control_codes=src_codes)
+    if 'length' in controls:
+        len_codes = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
+        story = prepare_story_for_control_test(story, txt_field, control='length', control_codes=len_codes)
 
-    sent_codes = get_summary_sentiment_codes(batch.summary, txt_field)
-    story = prepare_story_for_control_test(story, txt_field, control='sentiment', control_codes=sent_codes)
+    if 'source' in controls:
+        src_codes = ['<' + txt_nonseq_field.vocab.itos[src_ind] + '>' for src_ind in batch.source]
+        story = prepare_story_for_control_test(story, txt_field, control='source', control_codes=src_codes)
+
+    if 'sentiment' in controls:
+        sent_codes = get_summary_sentiment_codes(batch.summary, txt_field)
+        story = prepare_story_for_control_test(story, txt_field, control='sentiment', control_codes=sent_codes)
 
     return story, summary_to_rouge, summary_to_pass, lead_3
 
@@ -315,7 +318,7 @@ def train():
     num_field = Field(sequential=False, use_vocab=False)
     txt_nonseq_field = Field(sequential=False, use_vocab=True)
 
-    train_fields = [('id', txt_nonseq_field), ('stories', txt_field), ('length_tokens', num_field),
+    train_fields = [('id', txt_nonseq_field), ('story', txt_field), ('length_tokens', num_field),
                     ('length_sentences', num_field), ('source', txt_nonseq_field), 
                     ('entities', None), ('summary', txt_field)]
     
@@ -336,7 +339,7 @@ def train():
                                 skip_header=True, fields=train_fields).split(split_ratio=[0.922, 0.043, 0.035], random_state=st)
         train_data, val_data = [], []
         test_iter = BucketIterator(dataset=test_data, batch_size=args.batch_size, 
-            sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
+            sort_key=lambda x:(len(x.story), len(x.summary)), shuffle=True, train=False)
         txt_field.build_vocab(test_data)
         txt_nonseq_field.build_vocab(test_data)
     else:
@@ -344,9 +347,9 @@ def train():
                                 skip_header=True, fields=train_fields).split(split_ratio=[0.922, 0.043, 0.035], random_state=st)
         test_data = []
         train_iter = BucketIterator(dataset=train_data, batch_size=args.batch_size, 
-            sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=True)
+            sort_key=lambda x:(len(x.story), len(x.summary)), shuffle=True, train=True)
         val_iter = BucketIterator(dataset=val_data, batch_size=args.batch_size, 
-            sort_key=lambda x:(len(x.stories), len(x.summary)), shuffle=True, train=False)
+            sort_key=lambda x:(len(x.story), len(x.summary)), shuffle=True, train=False)
         txt_field.build_vocab(train_data, val_data)
         txt_nonseq_field.build_vocab(train_data, val_data)
 
@@ -377,11 +380,27 @@ def train():
             pickle.dump(txt_field.vocab.itos, file)    
 
     logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary before adding control codes.')
+    
+    controls = []
+    if args.controls == 0:
+        tmp_controls = ['1', '2', '3', '4']
+    else:
+        tmp_controls = [ctrl for ctrl in str(args.controls)]
+    if '1' in tmp_controls:
+        controls.append('length')
+        len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
+        txt_field = add_tokens_to_vocab(txt_field, len_tokens)
+    if '2' in tmp_controls:
+        controls.append('source')
+        source_tokens = ['<cnn>', '<dailymail>']
+        txt_field = add_tokens_to_vocab(txt_field, source_tokens)
+    if '3' in tmp_controls:
+        controls.append('entities')
+    if '4' in tmp_controls:
+        controls.append('sentiment')
+        sentiment_tokens = ['<pos>', '<neg>', '<neu>']
+        txt_field = add_tokens_to_vocab(txt_field, sentiment_tokens)
 
-    len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
-    source_tokens = ['<cnn>', '<dailymail>']
-    sentiment_tokens = ['<pos>', '<neg>', '<neu>']
-    txt_field = add_tokens_to_vocab(txt_field, len_tokens+source_tokens+sentiment_tokens)
     logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary after adding control codes.')
 
     padding_idx = txt_field.vocab.stoi[txt_field.pad_token]
@@ -441,7 +460,7 @@ def train():
             for no, batch in enumerate(test_iter):
                 batch_count += 1
                 
-                _, summary_to_rouge, _, _ = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds)
+                _, summary_to_rouge, _, _ = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls)
                 
                 start = time.time()
                 outputs, batch_lengths = test_on_length(model, batch, txt_field, len_tokens, device)
@@ -497,13 +516,13 @@ def train():
 
             # Train epoch
             for no, batch in enumerate(train_iter):
-                if batch.stories.shape[1] > max_len:
+                if batch.story.shape[1] > max_len:
                     continue
 
                 batch_count += 1
 
                 # Prepare inputs for forward pass
-                story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds)
+                story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls)
                 output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
                 output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
                 
@@ -518,7 +537,7 @@ def train():
                 optimizer.zero_grad()
 
                 epoch_loss += loss.item()
-                no_samples += len(batch.stories)
+                no_samples += len(batch.story)
                 if no % 500 == 0 and no != 0:
                     logger.info(f'Batch {no}, processed {no_samples} stories.')
                     logger.info(summary_to_rouge[0])
@@ -532,7 +551,7 @@ def train():
             with model.eval() and torch.no_grad():
                 for batch in val_iter:
                     val_batch_count += 1
-                    story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds)
+                    story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls)
                     output, _ = model(story.to(device), summary_to_pass.to(device))
                     
                     if val_batch_count % 100 == 0:
@@ -691,6 +710,8 @@ if __name__ == '__main__':
                         help='Use CPU for training')
     parser.add_argument('--save_model_to', type=str, default="saved_models/",
                         help='Output path for saved model')
+    parser.add_argument('--controls', type=int, default=0,
+                        help='Specification for control codes. 0 is all, 1 is length, 2 is source style, 3 is entities, 4 is sentiment. ')
     parser.add_argument('--no_len_tokens', type=int, default=NO_LEN_TOKENS,
                         help='Number of bins for summary lengths in terms of tokens.')
     parser.add_argument('--synth', action='store_true',

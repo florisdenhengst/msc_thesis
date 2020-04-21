@@ -57,38 +57,6 @@ logger = logging.getLogger('Training log')
 coloredlogs.install(logger=logger, level='DEBUG', fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
-def batch_size_fn(new, count, sofar):
-    "Keep augmenting batch and calculate total number of tokens + padding."
-    global max_src_in_batch, max_tgt_in_batch
-    if count == 1:
-        max_src_in_batch = 0
-        max_tgt_in_batch = 0
-    max_src_in_batch = max(max_src_in_batch,  len(new.stories))
-    max_tgt_in_batch = max(max_tgt_in_batch,  len(new.summary) + 2)
-    src_elements = count * max_src_in_batch
-    tgt_elements = count * max_tgt_in_batch
-    return max(src_elements, tgt_elements)
-
-class MyIterator(Iterator):
-    # from https://towardsdatascience.com/how-to-use-torchtext-for-neural-machine-translation-plus-hack-to-make-it-5x-faster-77f3884d95
-    def create_batches(self):
-        if self.train:
-            def pool(d, random_shuffler):
-                for p in torchdata.batch(d, self.batch_size * 100):
-                    p_batch = torchdata.batch(
-                        sorted(p, key=self.sort_key),
-                        self.batch_size, self.batch_size_fn)
-                    for b in random_shuffler(list(p_batch)):
-                        yield b
-            self.batches = pool(self.data(), self.random_shuffler)
-            
-        else:
-            self.batches = []
-            for b in torchdata.batch(self.data(), self.batch_size,
-                                          self.batch_size_fn):
-                self.batches.append(sorted(b, key=self.sort_key))
-
-
 class BPEncoder():
     def __init__(self, codes):
         self.bpe = apply_bpe.BPE(codes)
@@ -102,9 +70,6 @@ class BPEncoder():
 class CNNDM(Dataset):
     def __init__(self, data_path, cut_off_length=None, sources=['cnn', 'dailymail']):
         super(CNNDM).__init__()
-        # logger.info(os.path.join(data_path, '/cnn/stories/'))
-        # logger.info(os.path.join('.', '/cnn/stories/'))
-
 
         self.cut_off_length = cut_off_length
         self.data_path = data_path
@@ -152,7 +117,7 @@ class CNNDM(Dataset):
             if self.max_sum_length > 400:
                 logger.info(f'Longest summary: {self.max_sum_length} tokens.')
         no_sents, sum_len_after = self.quantize(summary)
-        item = {'id': self.stories[idx].split('.')[0], 'stories': content, 'length_tokens': sum_len_after, 
+        item = {'id': self.stories[idx].split('.')[0], 'story': content, 'length_tokens': sum_len_after, 
                         'length_sentences': no_sents, 'source': self.sources[idx], 'entities': anonymized, 
                         'summary': summary}
         return item
@@ -176,11 +141,6 @@ class CNNDM(Dataset):
                         self.special_characters_distribution[token] = 1
                     else:
                         self.special_characters_distribution[token] += 1
-                    # if len(self.delete_detector.findall(token)) != 0:
-                    #     logger.info(previous_token)
-                    # if len(self.delete_detector.findall(previous_token)) != 0:
-                    #     logger.info(previous_token)
-                    #     logger.info(token)
                 previous_token = token
                 self.word_count += 1        
             if no_samples != 0 and i >= no_samples:
@@ -307,10 +267,7 @@ class CNNDM(Dataset):
                         if len(self.delete_detector.findall(tokenized_story[i])) == 0:
                             token = self.decoder(tokenized_story[i])
                         else:
-                            # logger.info(tokenized_story[i])
                             token = self.decoder(re.sub(self.delete_detector, '', tokenized_story[i]))
-                            # logger.info(token)
-                        # print(token)
                 else:
                     token = tokenized_story[i]
                 if len(token) > 0:
@@ -318,14 +275,14 @@ class CNNDM(Dataset):
                 i += 1
         new_tokens = ' '.join(new_tokens).split('@ highlight')
         
-        content = new_tokens[0]
+        content = new_tokens[0].replace('  ', ' ')
         len_content = len(content.split(' '))
         self.story_length.append(len_content)
         if len_content > self.cut_off_length:
             content = ' '.join(content.split(' ')[0:self.cut_off_length])
             self.cut_stories += 1
 
-        summary = ' . '.join(new_tokens[1:])
+        summary = ' . '.join(new_tokens[1:]).replace('  ', ' ')
         len_summary = len(summary.split(' '))
         if len_summary > self.cut_off_length:
             summary = ' '.join(summary.split(' ')[0:self.cut_off_length])
@@ -342,6 +299,11 @@ class CNNDM(Dataset):
         return sents, tokens
 
 
+def log_length_statements(lengths_list, label):
+    logger.info(f'Maximum {label} length is {max(lengths_list)}.')
+    logger.info(f'Mean {label} length is {sum(lengths_list)/len(lengths_list)}.')    
+    logger.info(f'Minimum {label} length is {min(lengths_list)}.')
+
 
 def anonymize_and_bpe_data(data_path=Path(Path.cwd(), 'data/'), sources=['cnn', 'dailymail'], no_samples=0, cut_off_length=None):
     
@@ -353,12 +315,13 @@ def anonymize_and_bpe_data(data_path=Path(Path.cwd(), 'data/'), sources=['cnn', 
     
     logger.info('...done.')
 
-    processed_data = {'id': [], 'stories':[], 'length_tokens': [], 
+    processed_data = {'id': [], 'story':[], 'length_tokens': [], 
                         'length_sentences': [], 'source': [], 'entities': [], 'summary': []}
     
     tmp_name = Path(data_path, 'tmp.csv')
     csv_name = Path(data_path, '_'.join(sources) + '.csv')
     lengths = []
+    post_bpe_lengths = {'story': [], 'summary': []}
 
     with open(tmp_name, 'w') as tmp_file:
     
@@ -377,27 +340,24 @@ def anonymize_and_bpe_data(data_path=Path(Path.cwd(), 'data/'), sources=['cnn', 
 
             pattern = '@{3} enti@{2} ty@{2} (\d+@@ )*\d+(?!@)'
             original_summary = sample['summary']
-            sample['stories'] = re.sub(pattern, repl, bpencoder.encode(sample['stories']))
+            sample['story'] = re.sub(pattern, repl, bpencoder.encode(sample['story']))
+            if post_bpe_lengths['story'][-1] > 1000:
+                # 1 story that contains the number Pi here; clean it
+                continue
+            post_bpe_lengths['story'].append(len(sample['story'].split(' ')))
             
             sample['summary'] = re.sub(pattern, repl, bpencoder.encode(sample['summary']))
-
+            post_bpe_lengths['summary'].append(len(sample['summary'].split(' ')))
             lengths.append(sample['length_tokens'])
-            # entities_in_story = re.findall('@entity[\d+ ]+', sample['stories'])
-            # entities_in_summary = set(re.findall('@entity[\d+ ]+', sample['summary']))
-            # entities_in_story = set(re.findall('@entity\d+', sample['stories']))
-            # deviations = sum([len(re.findall('\s', ent_sample)) > 1 for ent_sample in entities_in_story]) + sum([len(re.findall('\s', ent_sample)) > 1 for ent_sample in entities_in_summary])
-            # deviations = 1 if entities_in_story!=set(sample['entities'].keys())  else 0 
-            # failed_entities += deviations
 
 
             writer.writerow(sample)
             if no % 5000 == 0 and no != 0:
                 logger.info(f'Progress: {no}/{len(dataset)} processed.')
-                logger.info(sample['stories'])
-                logger.info(sample['summary'])
             if no_samples is not 0 and no % no_samples == 0 and no != 0:
                 break
-    logger.info(sample['stories'])
+
+    logger.info(sample['story'])
     logger.info(sample['summary'])
     logger.info(original_summary)
     logger.info('')
@@ -407,14 +367,10 @@ def anonymize_and_bpe_data(data_path=Path(Path.cwd(), 'data/'), sources=['cnn', 
     len_hist = np.histogram(lengths, 10)
     logger.info('')
     logger.info(f'Maximum summary length is {dataset.max_sum_length}.')
-    logger.info(f'Maximum summary length is {max(lengths)}.')
-    logger.info(f'Mean summary length is {sum(lengths)/len(lengths)}.')    
-    logger.info(f'Minimum summary length is {min(lengths)}.')
-    logger.info('')
-    logger.info(f'Maximum story length is {max(dataset.story_length)}.')
-    logger.info(f'Mean story length is {sum(dataset.story_length)/len(dataset.story_length)}.')    
-    logger.info(f'Minimum story length is {min(dataset.story_length)}.')
-    logger.info('')
+    log_length_statements(lengths, 'summary')
+    log_length_statements(post_bpe_lengths['summary'], 'summary after bpe')
+    log_length_statements(dataset.story_length, 'story')
+    log_length_statements(post_bpe_lengths['story'], 'story after bpe')
     
     with open(tmp_name, 'r') as tmp_file, open(csv_name, 'w') as csv_file:
         logger.info(f'Modifying lengths and writing to {csv_name}...')
@@ -472,7 +428,43 @@ if __name__ == '__main__':
 
 
 
+# def batch_size_fn(new, count, sofar):
+#     "Keep augmenting batch and calculate total number of tokens + padding."
+#     global max_src_in_batch, max_tgt_in_batch
+#     if count == 1:
+#         max_src_in_batch = 0
+#         max_tgt_in_batch = 0
+#     max_src_in_batch = max(max_src_in_batch,  len(new.stories))
+#     max_tgt_in_batch = max(max_tgt_in_batch,  len(new.summary) + 2)
+#     src_elements = count * max_src_in_batch
+#     tgt_elements = count * max_tgt_in_batch
+#     return max(src_elements, tgt_elements)
 
+# class MyIterator(Iterator):
+#     # from https://towardsdatascience.com/how-to-use-torchtext-for-neural-machine-translation-plus-hack-to-make-it-5x-faster-77f3884d95
+#     def create_batches(self):
+#         if self.train:
+#             def pool(d, random_shuffler):
+#                 for p in torchdata.batch(d, self.batch_size * 100):
+#                     p_batch = torchdata.batch(
+#                         sorted(p, key=self.sort_key),
+#                         self.batch_size, self.batch_size_fn)
+#                     for b in random_shuffler(list(p_batch)):
+#                         yield b
+#             self.batches = pool(self.data(), self.random_shuffler)
+            
+#         else:
+#             self.batches = []
+#             for b in torchdata.batch(self.data(), self.batch_size,
+#                                           self.batch_size_fn):
+#                 self.batches.append(sorted(b, key=self.sort_key))
+
+            # entities_in_story = re.findall('@entity[\d+ ]+', sample['stories'])
+            # entities_in_summary = set(re.findall('@entity[\d+ ]+', sample['summary']))
+            # entities_in_story = set(re.findall('@entity\d+', sample['stories']))
+            # deviations = sum([len(re.findall('\s', ent_sample)) > 1 for ent_sample in entities_in_story]) + sum([len(re.findall('\s', ent_sample)) > 1 for ent_sample in entities_in_summary])
+            # deviations = 1 if entities_in_story!=set(sample['entities'].keys())  else 0 
+            # failed_entities += deviations
 
 
     # nlp = spacy.load("en", disable=["tagger", "parser", "ner"])
