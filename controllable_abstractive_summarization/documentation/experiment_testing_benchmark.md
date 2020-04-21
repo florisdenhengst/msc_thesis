@@ -25,7 +25,7 @@ The dataset used for the experiments is entity-anonymized CNN / Daily Mail, the 
 To achieve the finishing condition (val loss < 2e-4), it took 21 epochs and approximately 48 hours of training. The train and model losses in the figure below. The ROUGE score on the validation set by the end of training is ROUGE-1: 0.6780, ROUGE-2: 0.2849, ROUGE-L: 0.6538; those are obtained with teacher forcing and therefore are not representative of the models independent inference ability. 
 
 <p align="center">
-  <img src="./train_test_plots/train_val_loss.png" alt="train-validation-loss"/>
+  <img src="../train_test_plots/train_val_loss.png" alt="train-validation-loss"/>
 </p>
 
 # Testing without teacher forcing and enforcing length control
@@ -60,7 +60,7 @@ To return to the question of worse performance on native controls, we can averag
 Finally, to test if the model succeeds at enforcing control over length, every summary in the test set was passed through the model 10 times, once for every different length code. Having done this on all samples, we obtain the average summary length as well as ROUGE performance per length category. The following plot shows that the model indeed learns to write shorter or longer summaries based on the length control code:
 
 <p align="center">
-  <img src="./train_test_plots/test_length_control.png" alt="length-control-test"/>
+  <img src="../train_test_plots/test_length_control.png" alt="length-control-test"/>
 </p>
 
 
