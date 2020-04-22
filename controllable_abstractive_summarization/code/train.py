@@ -412,10 +412,10 @@ def train():
     end = time.time()
     logger.info(f'finished in {end-start} seconds.')
 
-    if args.test:
-        max_len = 1000
-    else: 
-        max_len = count_pads(train_iter, padding_idx)
+    # if args.test:
+    max_len = 1000
+    # else: 
+    _ = count_pads(train_iter, padding_idx)
             
     logger.info(f'Initializing model with:') 
     logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
@@ -517,6 +517,8 @@ def train():
             # Train epoch
             for no, batch in enumerate(train_iter):
                 if batch.story.shape[1] > max_len:
+                    continue
+                if batch.summary.shape[1] > max_len:
                     continue
 
                 batch_count += 1
