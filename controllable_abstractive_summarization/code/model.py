@@ -58,33 +58,18 @@ class ControllableSummarizer(nn.Module):
         return output, attention
 
 
-    def greedy_inference(self, src_tokens, sos_idx, eos_idx):
+    def rl_inference(self, src_tokens, sos_idx, eos_idx):
         conved, combined = self.encoder(src_tokens)
-        batch_size = conved.shape[0]
-        trg_idx = [[sos_idx] for j in range(batch_size)]
-        batch_complete = [False for b in range(batch_size)]
-        for i in range(self.max_length):
-            trg_tokens = torch.LongTensor(trg_idx).to(self.device)
-            
-            output, attention = self.decoder(trg_tokens, conved, combined, inference=True)
-            
-            out_idx = torch.argmax(output, dim=2)
-            
-            
-            if i != 0:
-                out_idx = out_idx[:, -1]
+        _, baseline_tokens = self.decoder.forward_sample(encoder_conved, encoder_combined, sos_idx, eos_idx, greedy=True)            
+        output, sample_tokens = self.decoder.forward_sample(encoder_conved, encoder_combined, sos_idx, eos_idx, sample=True)            
+        return output, sample_tokens, baseline_tokens
 
-            for j, ind in enumerate(out_idx):
-                trg_idx[j].append(int(ind))
-                if int(ind) == eos_idx:
-                    batch_complete[j] = True
-            if sum(batch_complete) == len(batch_complete):
-                print('stop early')
-                break
-
-            
-        return trg_idx, attention
-
+    def ml_rl_inference(self, src_tokens, trg_tokens, sos_idx, eos_idx):
+        conved, combined = self.encoder(src_tokens)
+        _, baseline_tokens = self.decoder.forward_sample(encoder_conved, encoder_combined, sos_idx, eos_idx, greedy=True)            
+        sample_output, sample_tokens = self.decoder.forward_sample(encoder_conved, encoder_combined, sos_idx, eos_idx, sample=True)            
+        output, _ = self.decoder(trg_tokens, conved, combined)
+        return output, sample_output, sample_tokens, baseline_tokens
 
     def inference(self, src_tokens, sos_idx, eos_idx, beam_width=3):
 
@@ -342,6 +327,69 @@ class ConvDecoder(nn.Module):
         output = self.fc_out(self.dropout(conved))                  #output = [batch size, trg len, output dim]
             
         return output, attention
+
+    def forward_sample(self, encoder_conved, encoder_combined, sos_idx, eos_idx, sample=False, greedy=False):
+        batch_size = conved.shape[0]
+        trg_tokens = torch.LongTensor([[sos_idx] for j in range(batch_size)]).to(self.device) 
+        batch_complete = [False for b in range(batch_size)]
+
+        for i in range(self.max_length):
+            #tok = pos = [batch size, trg len, emb dim]
+            pos = self.pos_embedding(torch.arange(i, i+1).unsqueeze(0).repeat(batch_size, 1).to(self.device))
+            tok = self.tok_embedding(trg_tokens[:,-1].unsqueeze(1))   
+            if i != 0:
+                pos = torch.cat((previous_pos, pos), dim=1)
+                tok = torch.cat((previous_tok, tok), dim=1)
+
+            x = self.dropout(tok + pos)                                 #x = [batch size, trg len, emb dim]
+            conv_input = self.emb2hid(x)                            #conv_input = [batch size, trg len, hid dim]
+            conv_input = conv_input.permute(0, 2, 1)                    #conv_input = [batch size, hid dim, trg len]
+            
+            for i, conv in enumerate(self.convs):
+                attn = self.attns[i]
+                conv_input = self.dropout(conv_input)            
+                padding = torch.zeros(batch_size, 
+                                          self.hid_dim, 
+                                          self.kernel_size - 1).fill_(self.padding_idx).to(self.device)   
+                padded_conv_input = torch.cat((padding, 
+                                            conv_input), dim = 2)           #padded_conv_input = [batch size, hid dim, trg len + kernel size - 1]
+                conved = conv(padded_conv_input)                        #conved = [batch size, 2 * hid dim, trg len]
+                conved = F.glu(conved, dim = 1)                         #conved = [batch size, hid dim, trg len]
+                if i % 2 == 0:
+                    attention, conved = attn(conved,
+                                        encoder_conved, 
+                                        encoder_combined,
+                                        x, self.scale)                              #attention = [batch size, trg len, src len]            
+                else:
+                    if attn is not None:
+                        conved = attn(conved)
+                    conved = conved.permute(0, 2, 1) * self.scale
+                    
+                conved = (conved + conv_input) * self.scale             #conved = [batch size, hid dim, trg len]
+                conv_input = conved
+                
+            conved = self.hid2emb(conved.permute(0, 2, 1))              #conved = [batch size, trg len, emb dim]
+                
+            output = self.fc_out(self.dropout(conved))                  #output = [batch size, trg len, output dim]
+
+            if sample:
+                out_tokens = torch.multinomial(output[:, -1, :], 1) 
+            elif greedy:
+                out_tokens = torch.argmax(output, dim=2)
+
+            out_tokens = out_tokens[:, -1].unsqueeze(1)
+            trg_tokens = torch.cat((trg_tokens, out_tokens), dim=1)
+            previous_pos = pos
+            previous_tok = tok
+
+            for j, ind in enumerate(out_tokens):
+                if int(ind[0]) == eos_idx:
+                    batch_complete[j] = True
+            if sum(batch_complete) == len(batch_complete):
+                print('stop early')
+                break
+            
+        return output, trg_tokens        
 
 class Attention(nn.Module):
     def __init__(self, out_channels, emb_dim, self_attention=False, device='cuda'):

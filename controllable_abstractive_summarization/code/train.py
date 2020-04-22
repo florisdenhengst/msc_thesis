@@ -306,6 +306,7 @@ def summarize_text(text, field, model, device, bpe_applied=True, desired_length=
 def train():
     random.seed(args.seed)
     st = random.getstate()
+
     sys.setrecursionlimit(1500) # handles some issues with Rouge
     
     data_path = Path(Path.cwd(), 'data/')
@@ -526,10 +527,13 @@ def train():
                 # Prepare inputs for forward pass
                 story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls)
                 output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
-                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
+                if reinforcement:
+                    output, sample_tokens = model.sample_inference(story.to(device), sos_idx, eos_idx)
+                    _, baseline_tokens = model.greedy_inference(story.to(device), sos_idx, eos_idx)
+                else:
+                    output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
                 
                 rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores)
-                
                 output = output.contiguous().view(-1, output.shape[-1])
                 summary = batch.summary[:,1:].contiguous().view(-1)
                 loss = crossentropy(output, summary.to(device))
@@ -557,7 +561,7 @@ def train():
                     output, _ = model(story.to(device), summary_to_pass.to(device))
                     
                     if val_batch_count % 100 == 0:
-                        output_greedy, _ = model.greedy_inference(story.to(device) , sos_idx, eos_idx)
+                        output_greedy, _ = model.greedy_inference(story.to(device), sos_idx, eos_idx)
                         output_greedy = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_greedy]
                         logger.info(f'Greedy prediction: {output_greedy[0]}')
                         logger.info(f'True summary: {summary_to_rouge[0]}')
