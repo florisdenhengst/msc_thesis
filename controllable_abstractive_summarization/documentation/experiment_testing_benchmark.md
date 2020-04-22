@@ -28,6 +28,8 @@ To achieve the finishing condition (val loss < 2e-4), it took 21 epochs and appr
   <img src="../train_test_plots/train_val_loss.png" alt="train-validation-loss"/>
 </p>
 
+The validation loss over time is lower than the training loss, and while this is an unusual behaviour it can be explained by the regularization through dropout that is enforced during training but ignored at validation time. 
+
 # Testing without teacher forcing and enforcing length control
 ### Performance on test set
 To evaluate the inference capacity of the trained model, we run inference on the test set without teacher forcing, i.e. the model does not have access to ground truth at inference time. We also test the capacity of the model at enforcing length control.
@@ -35,14 +37,14 @@ To evaluate the inference capacity of the trained model, we run inference on the
 More specifically, during training the model was exposed to one out of 10 length control codes, *lenX*, with values of X from 1 to 10. Each code indicates how long the ground truth summary is, where *len1* corresponds to shortest and *len10* corresponds to longest category. In this way, the model is exposed to the length codes during training and hopefully learns to generalize and adjust the inferred summaries based on any length code. 
 
 Testing the model without teacher forcing and any control codes, therefore omitting the *lenX* feature, leads to the following performance: 
-* ROUGE-1: 0.3535
-* ROUGE-2: 0.1143
-* ROUGE-L: 0.3286
+* ROUGE-1: 0.3258 (37.73)
+* ROUGE-2: 0.0969 (15.03)
+* ROUGE-L: 0.2874 (34.49)
 
 Including the *native* length code, however, leads to decreased ROUGE performance. Here, native indicates the length code of the ground-truth summary, even though the model does not have access to the text itself at inference time. The following is the performance:
-* ROUGE-1: 0.3112
-* ROUGE-2: 0.0964
-* ROUGE-L: 0.2880.
+* ROUGE-1: 0.3201 (39.16)
+* ROUGE-2: 0.0945 (15.54)
+* ROUGE-L: 0.2867 (35.94).
 While it is unclear why this occurs and contrasts the results reported in the original research, one hypothesis lies in the performance of the model on shorter length categories. Specifically, for conditioning on length code *len1* at test time for *all* samples leads to the following performance:
 * ROUGE-1: 0.22927753521653096
 * ROUGE-2: 0.06689455918110279
