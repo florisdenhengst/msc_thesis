@@ -27,7 +27,7 @@ class ControllableSummarizer(nn.Module):
         self.device = device
         self.padding_idx = padding_idx
         self.max_length = max_length
-        self.max_beam_length = int(max_length / 5)
+        self.max_sample_length = int(max_length / 5)
 
         # original paper shares word embeddings between encoder and decoder
         if share_weights:
@@ -50,7 +50,7 @@ class ControllableSummarizer(nn.Module):
                                     max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
         self.decoder = ConvDecoder(output_dim, emb_dim, hid_dim, n_layers, 
                                     kernel_size, dropout_prob, device, padding_idx, 
-                                    self_attention, max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
+                                    self_attention, self.max_length, self.max_sample_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
 
     def forward(self, src_tokens, trg_tokens):
         conved, combined = self.encoder(src_tokens)
@@ -60,7 +60,7 @@ class ControllableSummarizer(nn.Module):
 
     def rl_inference(self, src_tokens, sos_idx, eos_idx):
         conved, combined = self.encoder(src_tokens)
-        _, baseline_tokens = self.decoder.forward_sample(encoder_conved, encoder_combined, sos_idx, eos_idx, greedy=True)            
+        _, baseline_tokens = self.decoder.forward_sample(conved, combined, sos_idx, eos_idx, greedy=True)            
         output, sample_tokens = self.decoder.forward_sample(encoder_conved, encoder_combined, sos_idx, eos_idx, sample=True)            
         return output, sample_tokens, baseline_tokens
 
@@ -83,7 +83,7 @@ class ControllableSummarizer(nn.Module):
         batch_complete = [False for b in range(batch_size)]
         beam_for_batch = [0 for b in range(batch_size)]
 
-        for i in range(self.max_beam_length): 
+        for i in range(self.max_sample_length): 
             
             iter_tokens = []
             iter_probs = []
@@ -246,12 +246,14 @@ class ConvDecoder(nn.Module):
                  padding_idx, 
                  self_attention_heads=1,
                  max_length=1500, 
+                 max_sample_length=150,
                  tok_embedding=None, 
                  pos_embedding=None, 
                  hid2emb=None):
         super(ConvDecoder, self).__init__()
         
         self.kernel_size = kernel_size
+        self.max_sample_length = max_sample_length
         self.padding_idx = padding_idx
         self.hid_dim = hid_dim
         self.device = device
@@ -329,11 +331,11 @@ class ConvDecoder(nn.Module):
         return output, attention
 
     def forward_sample(self, encoder_conved, encoder_combined, sos_idx, eos_idx, sample=False, greedy=False):
-        batch_size = conved.shape[0]
+        batch_size = encoder_conved.shape[0]
         trg_tokens = torch.LongTensor([[sos_idx] for j in range(batch_size)]).to(self.device) 
         batch_complete = [False for b in range(batch_size)]
 
-        for i in range(self.max_length):
+        for i in range(self.max_sample_length):
             #tok = pos = [batch size, trg len, emb dim]
             pos = self.pos_embedding(torch.arange(i, i+1).unsqueeze(0).repeat(batch_size, 1).to(self.device))
             tok = self.tok_embedding(trg_tokens[:,-1].unsqueeze(1))   
@@ -363,8 +365,9 @@ class ConvDecoder(nn.Module):
                 else:
                     if attn is not None:
                         conved = attn(conved)
-                    conved = conved.permute(0, 2, 1) * self.scale
-                    
+                        conved = conved.permute(0, 2, 1) * self.scale
+                # print(conved.shape)
+                # print(conv_input.shape)
                 conved = (conved + conv_input) * self.scale             #conved = [batch size, hid dim, trg len]
                 conv_input = conved
                 
@@ -381,6 +384,9 @@ class ConvDecoder(nn.Module):
             trg_tokens = torch.cat((trg_tokens, out_tokens), dim=1)
             previous_pos = pos
             previous_tok = tok
+            print(f'out shape: {out_tokens.shape}')
+            print(f'trg shape: {trg_tokens.shape}')
+            print(f'output shape: {output.shape}')
 
             for j, ind in enumerate(out_tokens):
                 if int(ind[0]) == eos_idx:
