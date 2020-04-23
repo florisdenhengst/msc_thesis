@@ -204,27 +204,56 @@ def test_on_length(model, batch, txt_field, len_tokens, device):
 
     return output_to_rouge, length_performance
 
-def get_summary_sentiment_codes(summaries, txt_field):
+def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
     sid = SentimentIntensityAnalyzer()
     remove_tokens = ['<sos>', '<eos>', '<pad>']
     sentiment_codes = []
     for summary in summaries:
-        tmp = []
-        for ind in summary:
-            if txt_field.vocab.itos[ind] not in remove_tokens:
-                tmp.append(txt_field.vocab.itos[ind])
-        summary = ' '.join(tmp).replace('@@ ', '')
+        if not reinforcement:
+            tmp = []
+            for ind in summary:
+                if txt_field.vocab.itos[ind] not in remove_tokens:
+                    tmp.append(txt_field.vocab.itos[ind])
+            summary = ' '.join(tmp).replace('@@ ', '')
 
-        sentiment = sid.polarity_scores(summary)['compound']
-        if sentiment > 0.05:
-            sentiment_codes.append('<pos>')
-        elif sentiment < -0.05:
-            sentiment_codes.append('<neg>')
+            sentiment = sid.polarity_scores(summary)['compound']
+            if sentiment > 0.05:
+                sentiment_codes.append('<pos>')
+            elif sentiment < -0.05:
+                sentiment_codes.append('<neg>')
+            else:
+                sentiment_codes.append('<neu>')
         else:
-            sentiment_codes.append('<neu>')
+            coin = random.random()
+            if coin >= 2/3:
+                sentiment = '<pos>'
+            elif coin >= 1/3:
+                sentiment = '<neu>'
+            else:
+                sentiment = '<neg>'
+            sentiment_codes.append(sentiment)
+            
     return sentiment_codes
 
-def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls):
+def obtain_reward_sentiment(output_tokens, baseline_tokens, sentiment_codes):
+    sid = SentimentIntensityAnalyzer()
+    rewards = []
+    for sample, baseline, sentiment in zip(output_tokens, baseline_tokens, sentiment_codes):
+        r_sample = sid.polarity_scores(sample)['compound']
+        r_baseline = sid.polarity_scores(baseline)['compound']
+        if sentiment is '<pos>':
+            rewards.append(r_baseline - r_sample)
+        elif sentiment is '<neg>':
+            rewards.append(r_sample - r_baseline)
+        else:
+            rewards.append(abs(r_baseline - r_sample))
+    return torch.tensor(rewards)
+
+
+
+
+
+def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=False):
     summary_to_rouge, summary_to_pass = prepare_summaries(batch.summary, txt_field)
 
     if 'entities' in controls:
@@ -241,8 +270,9 @@ def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls):
         story = prepare_story_for_control_test(story, txt_field, control='source', control_codes=src_codes)
 
     if 'sentiment' in controls:
-        sent_codes = get_summary_sentiment_codes(batch.summary, txt_field)
-        story = prepare_story_for_control_test(story, txt_field, control='sentiment', control_codes=sent_codes)
+        sentiment_codes = get_summary_sentiment_codes(batch.summary, txt_field, reinforcement)
+        story = prepare_story_for_control_test(story, txt_field, control='sentiment', control_codes=sentiment_codes)
+        return story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes
 
     return story, summary_to_rouge, summary_to_pass, lead_3
 
@@ -443,7 +473,7 @@ def train():
         logger.info(f'{no_params} trainable parameters in the model.')
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.99, nesterov=True)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
-    crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx)
+    crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx, reduction='none')
     
     rouge = Rouge()
     sent_end_tokens = ['.', '!', '?']
@@ -525,18 +555,44 @@ def train():
                 batch_count += 1
 
                 # Prepare inputs for forward pass
-                story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls)
-                output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
-                if reinforcement:
-                    output, sample_tokens = model.sample_inference(story.to(device), sos_idx, eos_idx)
-                    _, baseline_tokens = model.greedy_inference(story.to(device), sos_idx, eos_idx)
+                if 'sentiment' in controls:
+                    story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                 else:
-                    output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]        
+                    story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls)
+                
+
+                logger.info(sentiment_codes)
+                
+                if args.reinforcement:
+                    output, output_tokens, baseline_tokens = model.rl_inference(story.to(device), sos_idx, eos_idx)
+                    baseline_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in baseline_tokens]
+                elif args.ml_reinforcement:
+                    output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), sos_idx, eos_idx)
+                    baseline_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in baseline_tokens]
+                else:
+                    output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
+                    output_tokens = torch.argmax(output, dim=2)
+
+                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_tokens]
+
                 
                 rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores)
-                output = output.contiguous().view(-1, output.shape[-1])
+                logger.info(f'output shape {output.shape}')
+                
                 summary = batch.summary[:,1:].contiguous().view(-1)
-                loss = crossentropy(output, summary.to(device))
+                output = output.contiguous().view(-1, output.shape[-1])
+                    
+                if not args.reinforcement:
+                    loss = crossentropy(output, summary.to(device))
+
+                    print(loss.shape)
+                    print(loss)
+                    print(loss.view(batch.summary.shape[0], -1).shape)
+                    print(loss.mean())
+                else:
+                    rewards = obtain_reward_sentiment(output_tokens, baseline_tokens, sentiment_codes)
+                assert 1 == 2
+                
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
                 optimizer.step()
@@ -720,6 +776,10 @@ if __name__ == '__main__':
                         help='Specification for control codes. 0 is all, 1 is length, 2 is source style, 3 is entities, 4 is sentiment. ')
     parser.add_argument('--no_len_tokens', type=int, default=NO_LEN_TOKENS,
                         help='Number of bins for summary lengths in terms of tokens.')
+    parser.add_argument('--reinforcement', action='store_true',
+                        help='Optimize with reinforcement')
+    parser.add_argument('--ml_reinforcement', action='store_true',
+                        help='Optimize with ml and rl objectives')
     parser.add_argument('--synth', action='store_true',
                         help='Whether to use on synthetic data')
     parser.add_argument('--self_attention', action='store_true',
