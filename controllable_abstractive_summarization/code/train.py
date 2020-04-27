@@ -524,10 +524,16 @@ def train():
     if args.test:
         test_rouge = None
         no_control_rouge = None
-        rouge_for_all = [None for i in range(len(len_tokens))]
-
         batch_count = 0
-        control_performance = [0 for i in range(len(len_tokens))]
+
+        if 'sentiment' in controls:
+            control_tokens = sentiment_tokens
+        elif 'length' in controls:
+            control_tokens = length_tokens
+
+        rouge_for_all = [None for i in range(len(control_tokens))]
+        control_performance = [0 for i in range(len(control_tokens))]
+
         with model.eval() and torch.no_grad():
             for no, batch in enumerate(test_iter):
                 batch_count += 1
@@ -535,11 +541,11 @@ def train():
                 if 'sentiment' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     outputs, control_results =test_on_control(model, batch, txt_field, controls[0], (sentiment_tokens, sentiment_codes), device)
-                    control_tokens = sentiment_tokens
+                    
                 elif 'length' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     outputs, control_results = test_on_control(model, batch, txt_field, controls[0], len_tokens, device)
-                    control_tokens = length_tokens
+                    
 
                 start = time.time()
                 
