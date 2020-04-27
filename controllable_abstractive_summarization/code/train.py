@@ -266,17 +266,17 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             if coin >= 2/3:
                 sentiment = '<pos>'
             elif coin >= 1/3:
-                sentiment = '<neu>'
-            else:
                 sentiment = '<neg>'
+            else:
+                sentiment = '<neu>'
             sentiment_codes.append(sentiment)
             
     return sentiment_codes
 
-def obtain_reward_sentiment(output_tokens, baseline_tokens, sentiment_codes):
+def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes):
     sid = SentimentIntensityAnalyzer()
     rewards = []
-    for sample, baseline, sentiment in zip(output_tokens, baseline_tokens, sentiment_codes):
+    for sample, baseline, sentiment in zip(output_to_rouge, baseline_to_rouge, sentiment_codes):
         r_sample = sid.polarity_scores(sample)['compound']
         r_baseline = sid.polarity_scores(baseline)['compound']
         if sentiment is '<pos>':
@@ -295,6 +295,7 @@ def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, r
     summary_to_rouge, summary_to_pass = prepare_summaries(batch.summary, txt_field)
     story = batch.story
     lead_3 = get_lead_3(batch.story, txt_field, sent_end_inds)
+
     if 'entities' in controls:     
         ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)  
         story = prepare_story_for_control_test(story, txt_field, control='entities', ent_tensor=ent_tensor)
@@ -463,6 +464,7 @@ def train():
         tmp_controls = ['1', '2', '3', '4']
     else:
         tmp_controls = [ctrl for ctrl in str(args.controls)]
+
     if '1' in tmp_controls:
         controls.append('length')
     if '2' in tmp_controls:
@@ -637,7 +639,7 @@ def train():
                     sample_output = sample_output.contiguous().view(-1, output.shape[-1])
                     sample_to_loss = output_tokens.contiguous().view(-1)
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                    rewards = obtain_reward_sentiment(output_tokens, baseline_tokens, sentiment_codes)
+                    rewards = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
                     loss = loss * rewards 
                     loss = loss.mean()
                     if args.ml_reinforcement:
@@ -832,7 +834,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_model_to', type=str, default="saved_models/",
                         help='Output path for saved model')
     parser.add_argument('--controls', type=int, default=0,
-                        help='Specification for control codes. 0 is all, 1 is length, 2 is source style, 3 is entities, 4 is sentiment. ')
+                        help='Specification for control codes. 0 is all, 1 is length, 2 is source style, 3 is entities, 4 is sentiment, -1 is none. ')
     parser.add_argument('--no_len_tokens', type=int, default=NO_LEN_TOKENS,
                         help='Number of bins for summary lengths in terms of tokens.')
     parser.add_argument('--reinforcement', action='store_true',
