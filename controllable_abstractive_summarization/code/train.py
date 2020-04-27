@@ -426,6 +426,7 @@ def train():
         logger.info(f'1st train article id is {sample.id}')
         sample = next(iter(val_iter))
         logger.info(f'1st val article id is {sample.id}')
+        _ = count_pads(train_iter, padding_idx)
         
     
     logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
@@ -483,7 +484,7 @@ def train():
     # if args.test:
     max_len = 1000
     # else: 
-    _ = count_pads(train_iter, padding_idx)
+    
             
     logger.info(f'Initializing model with:') 
     logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
