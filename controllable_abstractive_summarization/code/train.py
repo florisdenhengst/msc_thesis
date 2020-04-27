@@ -163,7 +163,7 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
     if control == 'length':
         native_controls, flex_controls, control_evl_fn = test_on_length(batch, txt_field, control_tokens)
     elif control == 'sentiment':
-        native_controls, flex_controls, control_evl_fn = test_on_control(batch, txt_field, control_tokens[0], control_tokens[1])
+        native_controls, flex_controls, control_evl_fn = test_on_sentiment(batch, txt_field, control_tokens[0], control_tokens[1])
 
     # Inference on input w/o control code
     output = model.inference(batch.story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
@@ -193,9 +193,10 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
         flex_results.append(control_evl_fn(output_to_rouge, batch.summary, story, txt_field))
 
         native_index = [i for i, x in enumerate(native_controls) if x == flex[0]]
-        for ind in native_index:
-            native_output[ind] = output_to_rouge[ind]
-            native_results[ind] = flex_results[-1][ind]
+        if len(native_index) > 0:
+            for ind in native_index:
+                native_output[ind] = output_to_rouge[ind]
+                native_results[ind] = flex_results[-1]['output'][ind]
     
     outputs = (no_control_output, native_output, flex_outputs)
     
