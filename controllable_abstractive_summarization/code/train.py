@@ -292,11 +292,11 @@ def obtain_reward_sentiment(output_tokens, baseline_tokens, sentiment_codes):
 
 def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=False):
     summary_to_rouge, summary_to_pass = prepare_summaries(batch.summary, txt_field)
-
-    if 'entities' in controls:
-        lead_3 = get_lead_3(batch.story, txt_field, sent_end_inds)     
+    story = batch.story
+    lead_3 = get_lead_3(batch.story, txt_field, sent_end_inds)
+    if 'entities' in controls:     
         ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)  
-        story = prepare_story_for_control_test(batch.story, txt_field, control='entities', ent_tensor=ent_tensor)
+        story = prepare_story_for_control_test(story, txt_field, control='entities', ent_tensor=ent_tensor)
 
     if 'length' in controls:
         len_codes = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
@@ -533,11 +533,11 @@ def train():
                 
                 if 'sentiment' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, control_results =test_on_control(model, batch, txt_field, control, (sentiment_tokens, sentiment_codes), device)
+                    outputs, control_results =test_on_control(model, batch, txt_field, controls[0], (sentiment_tokens, sentiment_codes), device)
                     control_tokens = sentiment_tokens
                 elif 'length' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, control_results = test_on_control(model, batch, txt_field, control, len_tokens, device)
+                    outputs, control_results = test_on_control(model, batch, txt_field, controls[0], len_tokens, device)
                     control_tokens = length_tokens
 
                 start = time.time()
