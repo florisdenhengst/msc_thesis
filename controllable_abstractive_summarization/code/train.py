@@ -450,6 +450,13 @@ def train():
 
     logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary before adding control codes.')
     
+    len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
+    txt_field = add_tokens_to_vocab(txt_field, len_tokens)
+    source_tokens = ['<cnn>', '<dailymail>']
+    txt_field = add_tokens_to_vocab(txt_field, source_tokens)
+    sentiment_tokens = ['<pos>', '<neg>', '<neu>']
+    txt_field = add_tokens_to_vocab(txt_field, sentiment_tokens)
+
     controls = []
     if args.controls == 0:
         tmp_controls = ['1', '2', '3', '4']
@@ -457,18 +464,12 @@ def train():
         tmp_controls = [ctrl for ctrl in str(args.controls)]
     if '1' in tmp_controls:
         controls.append('length')
-        len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
-        txt_field = add_tokens_to_vocab(txt_field, len_tokens)
     if '2' in tmp_controls:
         controls.append('source')
-        source_tokens = ['<cnn>', '<dailymail>']
-        txt_field = add_tokens_to_vocab(txt_field, source_tokens)
     if '3' in tmp_controls:
         controls.append('entities')
     if '4' in tmp_controls:
         controls.append('sentiment')
-        sentiment_tokens = ['<pos>', '<neg>', '<neu>']
-        txt_field = add_tokens_to_vocab(txt_field, sentiment_tokens)
 
     logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary after adding control codes.')
 
