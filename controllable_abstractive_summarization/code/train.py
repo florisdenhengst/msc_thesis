@@ -163,7 +163,7 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
     if control == 'length':
         native_controls, flex_controls, control_evl_fn = test_on_length(batch, txt_field, control_tokens)
     elif control == 'sentiment':
-        native_controls, flex_controls, control_evl_fn = test_on_sentiment(batch, txt_field, control_tokens)
+        native_controls, flex_controls, control_evl_fn = test_on_length(batch, txt_field, control_tokens[0], control_tokens[1])
 
     # Inference on input w/o control code
     output = model.inference(batch.story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
@@ -210,14 +210,14 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
     # length_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
     # return output_to_rouge, length_performance
 
-def test_on_length(model, batch, txt_field, len_tokens):
+def test_on_length(batch, txt_field, len_tokens):
     native_controls = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
     flex_controls = []
     for token in len_tokens:
         flex_controls.append([token for i in range(len(batch.summary))])
     return native_controls, flex_controls, evaluate_on_length
 
-def test_on_sentiment(model, batch, txt_field, sentiment_codes, sentiment_tokens, device):
+def test_on_sentiment(batch, txt_field, sentiment_tokens, sentiment_codes):
     native_controls = sentiment_codes
     flex_controls = []
     for token in sentiment_tokens:
@@ -524,26 +524,28 @@ def train():
         rouge_for_all = [None for i in range(len(len_tokens))]
 
         batch_count = 0
-        length_performance = [0 for i in range(len(len_tokens))]
+        control_performance = [0 for i in range(len(len_tokens))]
         with model.eval() and torch.no_grad():
             for no, batch in enumerate(test_iter):
                 batch_count += 1
                 
                 if 'sentiment' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, batch_lengths = test_on_sentiment(model, batch, txt_field, sentiment_codes, sentiment_tokens, device)
+                    outputs, control_results =test_on_control(model, batch, txt_field, control, (sentiment_tokens, sentiment_codes), device)
+                    control_tokens = sentiment_tokens
                 elif 'length' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, batch_lengths = test_on_length(model, batch, txt_field, len_tokens, device)
+                    outputs, control_results = test_on_control(model, batch, txt_field, control, len_tokens, device)
+                    control_tokens = length_tokens
 
                 start = time.time()
                 
                 
                 end = time.time()
-                logger.info(f'finished one length test in {end-start} seconds.')
+                logger.info(f'finished one control test in {end-start} seconds.')
 
-                length_performance = [all_len+ind_len for all_len, ind_len in zip(length_performance, batch_lengths)]
-                total_length_performance = [l/batch_count for l in length_performance]
+                control_performance = [all_len+ind_len for all_len, ind_len in zip(control_performance, control_results)]
+                total_control_performance = [l/batch_count for l in control_performance]
 
                 no_control_rouge, _  = calculate_rouge(summary_to_rouge, outputs[0], rouge, no_control_rouge)
                 test_rouge, temp_scores = calculate_rouge(summary_to_rouge, outputs[1], rouge, test_rouge)
@@ -554,22 +556,22 @@ def train():
                 if no % 10 == 0:
                     logger.info(f'Processed {no+1} batches.')
                     logger.info(f'True summary: {summary_to_rouge[0]}')
-                    for i, lt in enumerate(len_tokens):
-                        logger.info(f'Length category {lt}, output: {outputs[2][i][0]}')
+                    for i, lt in enumerate(control_tokens):
+                        logger.info(f'Control category {lt}, output: {outputs[2][i][0]}')
                     # logger.info(f'Average loss: {epoch_loss / no}.')
-                    logger.info(f'Length performance: {total_length_performance}')
+                    logger.info(f'Control performance: {total_control_performance}')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
             logger.info(f'Processed {batch_count} batches.')
             for i, r in enumerate(rouge_for_all):
                 rouge_for_all[i] = {key: {metric: float(r[key][metric]/batch_count) for metric in r[key].keys()} for key in r.keys()}
-                logger.info(f'Rouge on test set, controls {len_tokens[i]}: {rouge_for_all[i]}.')
+                logger.info(f'Rouge on test set, controls {control_tokens[i]}: {rouge_for_all[i]}.')
             
             test_rouge = {key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}
             no_control_rouge = {key: {metric: float(no_control_rouge[key][metric]/batch_count) for metric in no_control_rouge[key].keys()} for key in no_control_rouge.keys()}
             logger.info(f'Rouge on test set, native controls: {test_rouge}.')
             logger.info(f'Rouge on test set, no controls: {no_control_rouge}.')
 
-            logger.info(f'Length performance: {total_length_performance}')
+            logger.info(f'Control performance: {total_control_performance}')
 
     else:
         while optimizer.param_groups[0]['lr'] > 1e-5:
