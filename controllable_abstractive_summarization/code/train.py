@@ -159,50 +159,87 @@ def prepare_story_for_control_test(stories, txt_field, control, control_codes=No
     return story
 
 
-def test_on_control(model, batch, txt_field, native_controls, flex_controls, control, control_evl_fn, device):
-    outputs = []
+def test_on_control(model, batch, txt_field, control, control_tokens, device):
+    if control == 'length':
+        native_controls, flex_controls, control_evl_fn = test_on_length(batch, txt_field, control_tokens)
+    elif control == 'sentiment':
+        native_controls, flex_controls, control_evl_fn = test_on_sentiment(batch, txt_field, control_tokens)
 
     # Inference on input w/o control code
     output = model.inference(batch.story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
     output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
-    outputs.append(output_to_rouge)
+    no_control_output = output_to_rouge
 
     # Inference on input with native control code
-    story = prepare_story_for_control_test(batch.story, txt_field, control=control, control_codes=native_controls)
-    output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
-    output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
-    outputs.append(output_to_rouge)
-    native_results = control_evl_fn(output, batch.summary, story, txt_field)
+    # story = prepare_story_for_control_test(batch.story, txt_field, control=control, control_codes=native_controls)
+    # output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
+    # output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
+    # outputs.append(output_to_rouge)
+    # native_results = control_evl_fn(output_to_rouge, batch.summary, story, txt_field)
 
     # Inference on input over all control codes
     flex_results = []
+    flex_outputs = []
+    native_output = [None for i in range(len(batch.story))]
+    native_results = [None for i in range(len(batch.story))]
+
     for flex in flex_controls:
+
         story = prepare_story_for_control_test(batch.story, txt_field, control=control, control_codes=flex)
         output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
         output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
-        outputs.append(output_to_rouge)
-        flex_results.append(control_evl_fn(output, batch.summary, story, txt_field))
         
-    return outputs, native_results, flex_results
+        flex_outputs.append(output_to_rouge)
+        flex_results.append(control_evl_fn(output_to_rouge, batch.summary, story, txt_field))
 
-def evaluate_on_length(output, summary, story, txt_field):
-    output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
-    summary_to_rouge, _ = prepare_summaries(summary, txt_field)
-    sos_idx = txt_field.vocab.stoi['<sos>']
-    eos_idx = txt_field.vocab.stoi['<eos>']
-    length_outputs = [len(out.split(' ')) for out in output_to_rouge]
-    length_summary = [len(summary.split(' ')) for summary in summary_to_rouge]
-    return {'output': length_outputs, 'summary': length_summary}
+        native_index = [i for i, x in enumerate(native_controls) if x == flex[0]]
+        for ind in native_index:
+            native_output[ind] = output_to_rouge[ind]
+            native_results[ind] = flex_results[-1][ind]
+    
+    outputs = (no_control_output, native_output, flex_outputs)
+    
+    length_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
+    
+    return outputs, length_performance
 
-def test_on_length(model, batch, txt_field, len_tokens, device):
+    # return outputs, native_results, flex_results
+
+    # output_to_rouge, native_results, flex_results = test_on_control(model, batch, txt_field, native_controls, flex_controls, 'length', evaluate_on_length, device)
+
+    # length_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
+    # return output_to_rouge, length_performance
+
+def test_on_length(model, batch, txt_field, len_tokens):
     native_controls = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
     flex_controls = []
     for token in len_tokens:
-        flex_controls.append([token for i in range(len(batch.length_tokens))])
-    output_to_rouge, native_results, flex_results = test_on_control(model, batch, txt_field, native_controls, flex_controls, 'length', evaluate_on_length, device)
-    length_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
+        flex_controls.append([token for i in range(len(batch.summary))])
+    return native_controls, flex_controls, evaluate_on_length
 
-    return output_to_rouge, length_performance
+def test_on_sentiment(model, batch, txt_field, sentiment_codes, sentiment_tokens, device):
+    native_controls = sentiment_codes
+    flex_controls = []
+    for token in sentiment_tokens:
+        flex_controls.append([token for i in range(len(batch.summary))])
+    return native_controls, flex_controls, evaluate_on_sentiment
+
+
+def evaluate_on_length(output_to_rouge, summary, story, txt_field):
+    summary_to_rouge, _ = prepare_summaries(summary, txt_field)
+    length_output = [len(out.split(' ')) for out in output_to_rouge]
+    length_summary = [len(summary.split(' ')) for summary in summary_to_rouge]
+    return {'output': length_output, 'summary': length_summary}
+
+def evaluate_on_sentiment(output_to_rouge, summary, story, txt_field):
+    sid = SentimentIntensityAnalyzer()
+
+    summary_to_rouge, _ = prepare_summaries(summary, txt_field)
+    
+    sentiment_output = [sid.polarity_scores(out)['compound'] for out in output_to_rouge]
+    sentiment_summary = [sid.polarity_scores(summary)['compound'] for summary in summary_to_rouge]
+    return {'output': sentiment_output, 'summary': sentiment_summary}
+
 
 def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
     sid = SentimentIntensityAnalyzer()
@@ -460,7 +497,6 @@ def train():
         model.eval()
         metrics = {'test_loss':[], 'test_rouge':[]}
     else:
-        
         if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')):
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')))
         epoch = args.epoch
@@ -474,6 +510,8 @@ def train():
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.99, nesterov=True)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
     crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx, reduction='none')
+    if args.ml_reinforcement:
+        gamma = args.gamma
     
     rouge = Rouge()
     sent_end_tokens = ['.', '!', '?']
@@ -491,10 +529,16 @@ def train():
             for no, batch in enumerate(test_iter):
                 batch_count += 1
                 
-                _, summary_to_rouge, _, _ = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls)
-                
+                if 'sentiment' in controls:
+                    story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                    outputs, batch_lengths = test_on_sentiment(model, batch, txt_field, sentiment_codes, sentiment_tokens, device)
+                elif 'length' in controls:
+                    story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                    outputs, batch_lengths = test_on_length(model, batch, txt_field, len_tokens, device)
+
                 start = time.time()
-                outputs, batch_lengths = test_on_length(model, batch, txt_field, len_tokens, device)
+                
+                
                 end = time.time()
                 logger.info(f'finished one length test in {end-start} seconds.')
 
@@ -505,13 +549,13 @@ def train():
                 test_rouge, temp_scores = calculate_rouge(summary_to_rouge, outputs[1], rouge, test_rouge)
 
                 for i, r in enumerate(rouge_for_all):
-                    rouge_scores, _ = calculate_rouge(summary_to_rouge, outputs[i+2], rouge, r)
+                    rouge_scores, _ = calculate_rouge(summary_to_rouge, outputs[2][i], rouge, r)
                     rouge_for_all[i] = rouge_scores  
                 if no % 10 == 0:
                     logger.info(f'Processed {no+1} batches.')
                     logger.info(f'True summary: {summary_to_rouge[0]}')
                     for i, lt in enumerate(len_tokens):
-                        logger.info(f'Length category {lt}, output: {outputs[i+2][0]}')
+                        logger.info(f'Length category {lt}, output: {outputs[2][i][0]}')
                     # logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Length performance: {total_length_performance}')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
@@ -558,41 +602,45 @@ def train():
                 if 'sentiment' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                 else:
-                    story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls)
+                    story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                 
 
                 logger.info(sentiment_codes)
                 
                 if args.reinforcement:
-                    output, output_tokens, baseline_tokens = model.rl_inference(story.to(device), sos_idx, eos_idx)
-                    baseline_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in baseline_tokens]
-                elif args.ml_reinforcement:
-                    output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), sos_idx, eos_idx)
+                    if args.ml_reinforcement:
+                        output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), sos_idx, eos_idx)
+                    else:
+                        sample_output, output_tokens, baseline_tokens = model.rl_inference(story.to(device), sos_idx, eos_idx)
                     baseline_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in baseline_tokens]
                 else:
                     output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
                     output_tokens = torch.argmax(output, dim=2)
 
                 output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_tokens]
-
                 
                 rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores)
-                logger.info(f'output shape {output.shape}')
+                # logger.info(f'output shape {output.shape}')
                 
-                summary = batch.summary[:,1:].contiguous().view(-1)
-                output = output.contiguous().view(-1, output.shape[-1])
-                    
-                if not args.reinforcement:
-                    loss = crossentropy(output, summary.to(device))
-
-                    print(loss.shape)
-                    print(loss)
-                    print(loss.view(batch.summary.shape[0], -1).shape)
-                    print(loss.mean())
-                else:
+                if args.reinforcement:
+                    sample_output = sample_output.contiguous().view(-1, output.shape[-1])
+                    sample_to_loss = output_tokens.contiguous().view(-1)
+                    loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
                     rewards = obtain_reward_sentiment(output_tokens, baseline_tokens, sentiment_codes)
-                assert 1 == 2
-                
+                    loss = loss * rewards 
+                    loss = loss.mean()
+                    if args.ml_reinforcement:
+                        summary = batch.summary[:,1:].contiguous().view(-1)
+                        output = output.contiguous().view(-1, output.shape[-1])
+                        ml_loss = crossentropy(output, summary.to(device)).mean()
+                        loss = gamma * loss + (1 - gamma) * ml_loss
+
+                else:
+                    summary = batch.summary[:,1:].contiguous().view(-1)
+                    output = output.contiguous().view(-1, output.shape[-1])
+                    loss = crossentropy(output, summary.to(device))
+                    
+
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
                 optimizer.step()
@@ -780,6 +828,10 @@ if __name__ == '__main__':
                         help='Optimize with reinforcement')
     parser.add_argument('--ml_reinforcement', action='store_true',
                         help='Optimize with ml and rl objectives')
+    parser.add_argument('--gamma', type=float, default=0.9984,
+                        help='weight for rl loss (weight for ml loss is 1 - gamma)')
+    
+
     parser.add_argument('--synth', action='store_true',
                         help='Whether to use on synthetic data')
     parser.add_argument('--self_attention', action='store_true',
