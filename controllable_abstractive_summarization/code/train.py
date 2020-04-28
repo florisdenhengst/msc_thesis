@@ -428,7 +428,7 @@ def train():
         logger.info(f'1st train article id is {sample.id}')
         sample = next(iter(val_iter))
         logger.info(f'1st val article id is {sample.id}')
-        _ = count_pads(train_iter, padding_idx)
+        #_ = count_pads(train_iter, padding_idx)
         
     
     logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
@@ -618,7 +618,7 @@ def train():
                     story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                 
 
-                logger.info(sentiment_codes)
+                #logger.info(sentiment_codes)
                 
                 if args.reinforcement:
                     if args.ml_reinforcement:
@@ -651,7 +651,7 @@ def train():
                 else:
                     summary = batch.summary[:,1:].contiguous().view(-1)
                     output = output.contiguous().view(-1, output.shape[-1])
-                    loss = crossentropy(output, summary.to(device))
+                    loss = crossentropy(output, summary.to(device)).mean()
                     
 
                 loss.backward()
