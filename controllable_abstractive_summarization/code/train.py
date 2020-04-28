@@ -23,6 +23,8 @@ from data_preprocess import anonymize_and_bpe_data
 from artificial_data_preprocess import Synthetic
 from model import ControllableSummarizer
 
+from synthetic import train_synth
+
 from nltk.sentiment.vader import SentimentIntensityAnalyzer, SentiText
 
 EMB_DIM = 340 # from paper 
@@ -674,7 +676,11 @@ def train():
             with model.eval() and torch.no_grad():
                 for batch in val_iter:
                     val_batch_count += 1
-                    story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls)
+                    if 'sentiment' in controls:
+                        story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                    else:
+                        story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+
                     output, _ = model(story.to(device), summary_to_pass.to(device))
                     
                     if val_batch_count % 100 == 0:
@@ -687,7 +693,7 @@ def train():
 
                     output = output.contiguous().view(-1, output.shape[-1])
                     summary = batch.summary[:,1:].contiguous().view(-1)
-                    val_loss = crossentropy(output, summary.to(device))
+                    val_loss = crossentropy(output, summary.to(device)).mean()
                     val_epoch_loss += val_loss.item()
                 scheduler.step(val_epoch_loss / val_batch_count)
             
@@ -717,82 +723,6 @@ def train():
             logger.info(f'Epoch {epoch} took {end-start} seconds.')
 
 
-def train_synth():
-    padding_idx = 0
-    sos_idx = 1
-    eos_idx = 2
-
-    data = Synthetic(batch_size=32, vocab_size=100, max_in=50, max_out=10, min_in=20, min_out=5,
-                    padding_idx=padding_idx, sos_idx=sos_idx, eos_idx=eos_idx)
-    test_data = Synthetic(batch_size=5, vocab_size=100, max_in=50, max_out=10, min_in=20, min_out=5,
-                    padding_idx=padding_idx, sos_idx=sos_idx, eos_idx=eos_idx)
-    
-    input_dim = data.vocab_size + 10    # control length codes
-    output_dim = data.vocab_size + 10   # control length codes
-    max_len = max(data.max_in_len, data.max_out_len) + 2
-    
-    model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
-                                    hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
-                                    dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
-                                    share_weights=args.share_weights, max_length=max_len, 
-                                    self_attention=int(args.self_attention)).to(device)
-
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    no_params = sum([np.prod(p.size()) for p in model_parameters])
-    logger.info(f'{no_params} trainable parameters in the model.')
-
-    crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.2, momentum=0.99, nesterov=True)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
-
-    epoch_loss = 0
-    for n, batch in enumerate(data):
-        optimizer.zero_grad()
-        story = batch['input']
-        
-        summary_to_pass = exclude_token(batch['output'], int(data.eos_idx))
-        
-        output, _ = model(story.to(device), summary_to_pass.to(device))
-        
-        output_to_rouge = [[int(ind) for ind in torch.argmax(summ, dim=1)] for summ in output]
-        output = output.contiguous().view(-1, output.shape[-1])
-        summary = batch['output'][:,1:].contiguous().view(-1)
-        loss = crossentropy(output, summary.to(device))
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
-        optimizer.step()
-        epoch_loss += loss.item()
-
-        if n % 2000 == 0:
-            logger.info(f'Batch {n+1}, loss: {epoch_loss / (n+1)}.')
-            logger.info
-            logger.info(story[0])
-            logger.info(summary_to_pass[0])
-            logger.info(output_to_rouge[0])
-        if n % 2000 == 0:
-            if  n != 0:
-                scheduler.step()
-            if args.test:
-                batch_count = 0
-                with model.eval() and torch.no_grad():
-                    for no, batch in enumerate(test_data):
-                        batch_count += 1
-                        story = batch['input']
-                        summary_to_pass = exclude_token(batch['output'], int(data.eos_idx))
-                        output = model.inference(story.to(device) , sos_idx, eos_idx)
-                        # logger.info(f'Beams before selection: {output}')
-                        # output = torch.tensor([output['beam_' + str(abs(i))][b] for b, i in enumerate(beams)])
-                        # print(output)
-                        
-                        logger.info(f'Processed {no} stories.')
-                        logger.info(f'True: {summary_to_pass}')
-                        logger.info(f'Beam: {output}')
-                            # logger.info(f'Greedy: {greedy_output}')
-                        if no % 1 == 0 and no != 0:
-                            break
-
-
-
 
 
 if __name__ == '__main__':
@@ -815,6 +745,12 @@ if __name__ == '__main__':
                         help='dropout probability')    
     parser.add_argument('--lr', type=float, default=0.2,
                         help='predictor learning rate')
+    parser.add_argument('--self_attention', action='store_true',
+                        help='Whether to use self_attention')
+    parser.add_argument('--share_weights', action='store_true',
+                        help='Share weights between encoder and decoder as per Fan')
+
+
     parser.add_argument('--seed', type=int, default=42,
                         help='Train with a fixed seed')
     parser.add_argument('--epoch', type=int, default=0,
@@ -823,32 +759,31 @@ if __name__ == '__main__':
                         help='Use test set')
     parser.add_argument('--full_train', action='store_true',
                         help='Train full model')
-    parser.add_argument('--share_weights', action='store_true',
-                        help='Share weights between encoder and decoder as per Fan')
+
     parser.add_argument('--debug', action='store_true',
                         help='Debug for CUDA or not')
     parser.add_argument('--count_pads', action='store_true',
                         help='Count what % paddings in batches are or not')
     parser.add_argument('--cpu', action='store_true',
                         help='Use CPU for training')
+
     parser.add_argument('--save_model_to', type=str, default="saved_models/",
                         help='Output path for saved model')
     parser.add_argument('--controls', type=int, default=0,
-                        help='Specification for control codes. 0 is all, 1 is length, 2 is source style, 3 is entities, 4 is sentiment, -1 is none. ')
+                        help='Specification for control codes. \
+                        0 is all, 1 is length, 2 is source style, 3 is entities, 4 is sentiment, -1 is none. ')
     parser.add_argument('--no_len_tokens', type=int, default=NO_LEN_TOKENS,
                         help='Number of bins for summary lengths in terms of tokens.')
+
     parser.add_argument('--reinforcement', action='store_true',
                         help='Optimize with reinforcement')
     parser.add_argument('--ml_reinforcement', action='store_true',
                         help='Optimize with ml and rl objectives')
     parser.add_argument('--gamma', type=float, default=0.9984,
                         help='weight for rl loss (weight for ml loss is 1 - gamma)')
-    
 
     parser.add_argument('--synth', action='store_true',
                         help='Whether to use on synthetic data')
-    parser.add_argument('--self_attention', action='store_true',
-                        help='Whether to use self_attention')
 
     args = parser.parse_args()
 
@@ -859,7 +794,6 @@ if __name__ == '__main__':
         device = torch.device("cpu")
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
     if args.synth:
         train_synth()
