@@ -37,22 +37,24 @@ To evaluate the inference capacity of the trained model, we run inference on the
 More specifically, during training the model was exposed to one out of 10 length control codes, *lenX*, with values of X from 1 to 10. Each code indicates how long the ground truth summary is, where *len1* corresponds to shortest and *len10* corresponds to longest category. In this way, the model is exposed to the length codes during training and hopefully learns to generalize and adjust the inferred summaries based on any length code. 
 
 Testing the model without teacher forcing and any control codes, therefore omitting the *lenX* feature, leads to the following performance: 
-* ROUGE-1: 0.3258 (37.73)
-* ROUGE-2: 0.0969 (15.03)
-* ROUGE-L: 0.2874 (34.49)
+* ROUGE-1: 32.58 (37.73, values in brackets are the metrics reported by Fan et al.)
+* ROUGE-2: 9.69 (15.03)
+* ROUGE-L: 28.74 (34.49)
 
 Including the *native* length code, however, leads to decreased ROUGE performance. Here, native indicates the length code of the ground-truth summary, even though the model does not have access to the text itself at inference time. The following is the performance:
-* ROUGE-1: 0.3201 (39.16)
-* ROUGE-2: 0.0945 (15.54)
-* ROUGE-L: 0.2867 (35.94).
+* ROUGE-1: 32.01 (39.16)
+* ROUGE-2: 9.45 (15.54)
+* ROUGE-L: 28.67 (35.94).
+
 While it is unclear why this occurs and contrasts the results reported in the original research, one hypothesis lies in the performance of the model on shorter length categories. Specifically, for conditioning on length code *len1* at test time for *all* samples leads to the following performance:
-* ROUGE-1: 0.22927753521653096
-* ROUGE-2: 0.06689455918110279
-* ROUGE-L: 0.21155107748009144,
+* ROUGE-1: 22.93
+* ROUGE-2: 6.69
+* ROUGE-L: 21.16
+
 which is considerably lower than the performance without native codes. Since the dataset was split into 10 even length categories, each containing the same number of samples, it suggests that for summaries whose true summary is longer than minimum *len1* conditioning worsens the performance. However, the reverse holds as well: best performance is achieved with *len10* control code. It is surprising to see that a single discrete feature can boost the performance; however, it is also obvious that it should practically boost ROUGE, since the metric calculates recall rather than precision between the generated summary and ground truth. Therefore, as the model makes longer predictions, it has a higher chance of including text that is also present in the target:
-* ROUGE-1: 0.3729
-* ROUGE-2: 0.1224
-* ROUGE-L: 0.3465
+* ROUGE-1: 37.29
+* ROUGE-2: 12.24
+* ROUGE-L: 34.65
 
 To return to the question of worse performance on native controls, we can average the performance over all length categories and see how close the values is in this case. If short length codes restrict the model performance even for samples whose ground truth length is low, then the performance comes as no surprise. **TODO**
 

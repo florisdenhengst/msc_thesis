@@ -4,7 +4,9 @@ Before proceeding with the reinforcement learning experiment, first a test of th
 
 To test this, sentiment of every summary has been inferred with a rule-based sentiment analyzer VADER available in the NLTK package for Python. The sentiment score consists of four rubrics: positive, negative and neutral valence and a compound score. The former three count the ratio of words with certain valence, while taking into account accentuations (e.g. "good" vs. "very good") and negations (e.g. "not good"). The latter, compound score, is a composite of the positive, negative and neutral valence; however, neutral words do not contribute to the compound score as their valence is assigned 0. According to the documentation of VADER, compound score *s > 0.05* corresponds to positive sentiment, compound score *s < 0.05* to negative sentiment and values in between to neutral sentiment. Hence, all summaries in the dataset were classified as positive, negative or neutral according to this rule. This results in the following distribution: 
 
-**ADD DISTRIBUTION OF SENTIMENT IN TRAIN SET**
+<p align="center">
+  <img src="../train_test_plots/sentiment_label_distribution.png" alt="sentiment_label_distribution"/>
+</p>
 
 ### Performance on test set
 In fashion similar to other control features in the controllable abstractive summarization experiment, we prepend a sentiment class to all inputs (i.e. news stories) that are fed to the seq2seq model. The model, identical to the baseline from previous experiments, was trained for 30 epochs on an updated version of the dataset, cleaned from special unicode characters. 
