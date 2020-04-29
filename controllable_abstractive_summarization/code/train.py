@@ -684,7 +684,7 @@ def train():
                     output, _ = model(story.to(device), summary_to_pass.to(device))
                     
                     if val_batch_count % 100 == 0:
-                        output_greedy, _ = model.greedy_inference(story.to(device), sos_idx, eos_idx)
+                        output_greedy = model.greedy_inference(story.to(device), sos_idx, eos_idx)
                         output_greedy = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_greedy]
                         logger.info(f'Greedy prediction: {output_greedy[0]}')
                         logger.info(f'True summary: {summary_to_rouge[0]}')

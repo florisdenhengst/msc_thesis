@@ -71,6 +71,11 @@ class ControllableSummarizer(nn.Module):
         output, _ = self.decoder(trg_tokens, conved, combined)
         return output, sample_output, sample_tokens, baseline_tokens
 
+    def greedy_inference(self, src_tokens, sos_idx, eos_idx):
+        conved, combined = self.encoder(src_tokens)
+        output, greedy_tokens = self.decoder.forward_sample(conved, combined, sos_idx, eos_idx, greedy=True)            
+        return greedy_tokens
+
     def inference(self, src_tokens, sos_idx, eos_idx, beam_width=3):
 
         conved, combined = self.encoder(src_tokens)
