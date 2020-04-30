@@ -8,6 +8,8 @@ To test this, sentiment of every summary has been inferred with a rule-based sen
   <img src="../train_test_plots/sentiment_label_distribution.png" alt="sentiment_label_distribution"/>
 </p>
 
+As can be observed here, the distribution is not uniform, in constrast with the distribution of length codes in the previous experiment. Moreover, neutral sentiment class is underrepresented in the distribution compared to the other two. While it might be problematic for the model to pick up on the neutral sentiment control, there is a comparable ratio of positive and negative classes in the dataset, which should allow the model to learn. 
+
 ### Performance on test set
 In fashion similar to other control features in the controllable abstractive summarization experiment, we prepend a sentiment class to all inputs (i.e. news stories) that are fed to the seq2seq model. The model, identical to the baseline from previous experiments, was trained for 30 epochs on an updated version of the dataset, cleaned from special unicode characters. 
 
@@ -32,3 +34,10 @@ To confirm whether the model achieves sentiment control, every sample in the tes
 
 While it indeed holds that the highest compound sentiment is observed for positive control code and the lowest is for negative code, the actual magnitude of the score is very limited. Moreover, for all sentiment categories the compound score is negative, and according to the VADER methodology, every observed score corresponds to the negative sentiment. 
 
+Perhaps, this has to do both with the complexity of sentiment control and the narrow distribution of valence in the dataset. Note, that this is different from the distribution of sentiment labels in data; the narrow distribution of valence refers to the observation that the overwhelming majority of summaries is observed with an abundance of neutrally valent and shortage of positively and negatively valent words, suggesting that sentiment is an "out-of-domain" feature of control. 
+
+<p align="center">
+  <img src="../sentiment_plots/summary_hist.png" alt="sentiment-summary"/>
+</p>
+
+This observation confirms our hypothesis that supervised conditional learning is not a suitable framework for enforcing sentiment over the abstractive summarization task, specifically on the CNN/Daily Mail dataset. Tt remains unclear whether this is due to the out-of-domain nature of sentiment in this dataset, or with the complexity of sentiment control that needs specific mechanisms in the training pipeline to be successfully enforced. Nevertheless, this suggests that it is worthy to proceed with the reinforced controllable summarization model, specifically with sentiment control.
