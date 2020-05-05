@@ -285,9 +285,9 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
             rewards.append(r_baseline - r_sample)
         elif sentiment is '<neg>':
             rewards.append(r_sample - r_baseline)
-        else:
+        elif sentiment is '<neu>':
             rewards.append(abs(r_baseline - r_sample))
-    return torch.tensor(rewards)
+    return torch.tensor(rewards), r_sample
 
 
 
@@ -504,8 +504,11 @@ def train():
         model.eval()
         metrics = {'test_loss':[], 'test_rouge':[]}
     else:
-        if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')):
+        if args.reinforcement:
+            model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
+        elif Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model'))::
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')))
+            
         epoch = args.epoch
         metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
         if Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl')):
@@ -515,7 +518,10 @@ def train():
         no_params = sum([np.prod(p.size()) for p in model_parameters])
         logger.info(f'{no_params} trainable parameters in the model.')
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.99, nesterov=True)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
+        if args.reinforcement:
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, factor=0.1)
+        else:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
     crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx, reduction='none')
     if args.ml_reinforcement:
         gamma = args.gamma
@@ -523,20 +529,24 @@ def train():
     rouge = Rouge()
     sent_end_tokens = ['.', '!', '?']
     sent_end_inds = [txt_field.vocab.stoi[token] for token in sent_end_tokens]
-    recursion_count = 0    
+    recursion_count = 0
+    stop_condition = True    
+
+    if 'sentiment' in controls:
+        control_tokens = sentiment_tokens
+    elif 'length' in controls:
+        control_tokens = length_tokens
+    
 
     if args.test:
         test_rouge = None
         no_control_rouge = None
         batch_count = 0
 
-        if 'sentiment' in controls:
-            control_tokens = sentiment_tokens
-        elif 'length' in controls:
-            control_tokens = length_tokens
 
         rouge_for_all = [None for i in range(len(control_tokens))]
         control_performance = [0 for i in range(len(control_tokens))]
+        
 
         with model.eval() and torch.no_grad():
             for no, batch in enumerate(test_iter):
@@ -587,7 +597,10 @@ def train():
             logger.info(f'Control performance: {total_control_performance}')
 
     else:
-        while optimizer.param_groups[0]['lr'] > 1e-5:
+        control_performance = {'train': [[] for i in range(len(control_tokens))],
+                                'val': [[] for i in range(len(control_tokens))]}
+
+        while stop_condition:
             logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
             epoch += 1
             no_samples = 0
@@ -597,6 +610,9 @@ def train():
             val_rouge_scores = None
             batch_count = 0
             val_batch_count = 0
+
+            train_controls = [0 for range(len(control_tokens))]
+            val_controls = [0 for range(len(control_tokens))]
 
             model.train()
 
@@ -641,7 +657,16 @@ def train():
                     sample_output = sample_output.contiguous().view(-1, output.shape[-1])
                     sample_to_loss = output_tokens.contiguous().view(-1)
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                    rewards = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
+                    rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
+
+                    for no, group in sentiment_codes:
+                        if group is '<pos>':
+                            train_controls[0] += sentiments[no]
+                        elif group is '<neg>':
+                            train_controls[1] += sentiments[no]
+                        elif group is '<neu>':
+                            train_controls[2] += sentiments[no]
+
                     loss = loss * rewards 
                     loss = loss.mean()
                     if args.ml_reinforcement:
@@ -669,6 +694,8 @@ def train():
                     logger.info(output_to_rouge[0])
                     logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
+                    logger.info(f'Control performance: {[score / no for score in train_controls]}.')
+
                     end = time.time()
                     logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
 
@@ -676,25 +703,64 @@ def train():
             with model.eval() and torch.no_grad():
                 for batch in val_iter:
                     val_batch_count += 1
+
                     if 'sentiment' in controls:
                         story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     else:
                         story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-
-                    output, _ = model(story.to(device), summary_to_pass.to(device))
                     
-                    if val_batch_count % 100 == 0:
-                        output_greedy = model.greedy_inference(story.to(device), sos_idx, eos_idx)
-                        output_greedy = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_greedy]
-                        logger.info(f'Greedy prediction: {output_greedy[0]}')
-                        logger.info(f'True summary: {summary_to_rouge[0]}')
-                    output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in torch.argmax(summ, dim=1)]) for summ in output]
-                    val_rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, val_rouge_scores)
+                    
+                    if args.reinforcement:
+                        if args.ml_reinforcement:
+                            output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), sos_idx, eos_idx)
+                        else:
+                            sample_output, output_tokens, baseline_tokens = model.rl_inference(story.to(device), sos_idx, eos_idx)
+                        baseline_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in baseline_tokens]
+                    else:
+                        output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
+                        output_tokens = torch.argmax(output, dim=2)
 
-                    output = output.contiguous().view(-1, output.shape[-1])
-                    summary = batch.summary[:,1:].contiguous().view(-1)
-                    val_loss = crossentropy(output, summary.to(device)).mean()
+                    output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_tokens]
+                    
+                    rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, val_rouge_scores)
+                    
+                    if args.reinforcement:
+                        sample_output = sample_output.contiguous().view(-1, output.shape[-1])
+                        sample_to_loss = output_tokens.contiguous().view(-1)
+                        loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
+                        rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
+
+                        for no, group in sentiment_codes:
+                            if group is '<pos>':
+                                val_controls[0] += sentiments[no]
+                            elif group is '<neg>':
+                                val_controls[1] += sentiments[no]
+                            elif group is '<neu>':
+                                val_controls[2] += sentiments[no]
+
+                        loss = loss * rewards 
+                        loss = loss.mean()
+                        if args.ml_reinforcement:
+                            summary = batch.summary[:,1:].contiguous().view(-1)
+                            output = output.contiguous().view(-1, output.shape[-1])
+                            ml_loss = crossentropy(output, summary.to(device)).mean()
+                            loss = gamma * loss + (1 - gamma) * ml_loss
+
+                    else:
+                        summary = batch.summary[:,1:].contiguous().view(-1)
+                        output = output.contiguous().view(-1, output.shape[-1])
+                        loss = crossentropy(output, summary.to(device)).mean()
+
+                    if val_batch_count % 100 == 0:
+                        logger.info(f'Greedy prediction: {baseline_to_rouge[0]}')
+                        logger.info(f'True summary: {summary_to_rouge[0]}')
+                    
                     val_epoch_loss += val_loss.item()
+
+
+            if args.reinforcement:
+                scheduler.step()
+            else:
                 scheduler.step(val_epoch_loss / val_batch_count)
             
             # Averaging ROUGE scores
@@ -705,6 +771,9 @@ def train():
             metrics['val_rouge'].append(val_rouge_scores)
             metrics['train_loss'].append(epoch_loss / batch_count)
             metrics['train_rouge'].append(rouge_scores)
+
+            control_performance['train'].append([score / batch_count for score in train_controls])
+            control_performance['val'].append([score / val_batch_count for score in val_controls])
 
             # Saving model if validation loss decreasing
             logger.info(metrics)
@@ -721,6 +790,12 @@ def train():
 
             end = time.time()
             logger.info(f'Epoch {epoch} took {end-start} seconds.')
+
+            if args.reinforcement:
+                stop_condition = epoch < args.max_epoch
+            else:
+                stop_condition = optimizer.param_groups[0]['lr'] > 1e-5
+
 
 
 
@@ -755,6 +830,8 @@ if __name__ == '__main__':
                         help='Train with a fixed seed')
     parser.add_argument('--epoch', type=int, default=0,
                         help='Epoch number (if cont training)')
+    parser.add_argument('--max-epoch', type=int, default=20,
+                        help='Max epoch number (if reinforcement)')
     parser.add_argument('--test', action='store_true',
                         help='Use test set')
     parser.add_argument('--full_train', action='store_true',

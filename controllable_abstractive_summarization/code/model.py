@@ -76,7 +76,7 @@ class ControllableSummarizer(nn.Module):
         output, greedy_tokens = self.decoder.forward_sample(conved, combined, sos_idx, eos_idx, greedy=True)            
         return greedy_tokens
 
-    def inference(self, src_tokens, sos_idx, eos_idx, beam_width=3):
+    def inference(self, src_tokens, sos_idx, eos_idx, beam_width=5):
 
         conved, combined = self.encoder(src_tokens)
         batch_size = conved.shape[0]
