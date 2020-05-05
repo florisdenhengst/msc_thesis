@@ -61,13 +61,13 @@ class ControllableSummarizer(nn.Module):
     def rl_inference(self, src_tokens, sos_idx, eos_idx):
         conved, combined = self.encoder(src_tokens)
         _, baseline_tokens = self.decoder.forward_sample(conved, combined, sos_idx, eos_idx, greedy=True)            
-        output, sample_tokens = self.decoder.forward_sample(encoder_conved, encoder_combined, sos_idx, eos_idx, sample=True)            
+        output, sample_tokens = self.decoder.forward_sample(conved, combined, sos_idx, eos_idx, sample=True)            
         return output, sample_tokens, baseline_tokens
 
     def ml_rl_inference(self, src_tokens, trg_tokens, sos_idx, eos_idx):
         conved, combined = self.encoder(src_tokens)
-        _, baseline_tokens = self.decoder.forward_sample(encoder_conved, encoder_combined, sos_idx, eos_idx, greedy=True)            
-        sample_output, sample_tokens = self.decoder.forward_sample(encoder_conved, encoder_combined, sos_idx, eos_idx, sample=True)            
+        _, baseline_tokens = self.decoder.forward_sample(conved, combined, sos_idx, eos_idx, greedy=True)            
+        sample_output, sample_tokens = self.decoder.forward_sample(conved, combined, sos_idx, eos_idx, sample=True)            
         output, _ = self.decoder(trg_tokens, conved, combined)
         return output, sample_output, sample_tokens, baseline_tokens
 
@@ -383,18 +383,15 @@ class ConvDecoder(nn.Module):
             if sample:
                 out_tokens = torch.multinomial(output[:, -1, :], 1) 
             elif greedy:
-                out_tokens = torch.argmax(output, dim=2)
+                out_tokens = torch.argmax(output, dim=2)[:, -1]
 
-            out_tokens = out_tokens[:, -1].unsqueeze(1)
+            out_tokens = out_tokens.unsqueeze(1)
             trg_tokens = torch.cat((trg_tokens, out_tokens), dim=1)
             previous_pos = pos
             previous_tok = tok
-            print(f'out shape: {out_tokens.shape}')
-            print(f'trg shape: {trg_tokens.shape}')
-            print(f'output shape: {output.shape}')
 
             for j, ind in enumerate(out_tokens):
-                if int(ind[0]) == eos_idx:
+                if ind.tolist()[0] == eos_idx:
                     batch_complete[j] = True
             if sum(batch_complete) == len(batch_complete):
                 print('stop early')

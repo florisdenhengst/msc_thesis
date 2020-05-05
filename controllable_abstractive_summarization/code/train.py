@@ -506,7 +506,7 @@ def train():
     else:
         if args.reinforcement:
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
-        elif Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model'))::
+        elif Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')):
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')))
             
         epoch = args.epoch
@@ -519,7 +519,7 @@ def train():
         logger.info(f'{no_params} trainable parameters in the model.')
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.99, nesterov=True)
         if args.reinforcement:
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, factor=0.1)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
         else:
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
     crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx, reduction='none')
@@ -611,8 +611,8 @@ def train():
             batch_count = 0
             val_batch_count = 0
 
-            train_controls = [0 for range(len(control_tokens))]
-            val_controls = [0 for range(len(control_tokens))]
+            train_controls = [0 for i in range(len(control_tokens))]
+            val_controls = [0 for i in range(len(control_tokens))]
 
             model.train()
 
@@ -830,7 +830,7 @@ if __name__ == '__main__':
                         help='Train with a fixed seed')
     parser.add_argument('--epoch', type=int, default=0,
                         help='Epoch number (if cont training)')
-    parser.add_argument('--max-epoch', type=int, default=20,
+    parser.add_argument('--max_epoch', type=int, default=20,
                         help='Max epoch number (if reinforcement)')
     parser.add_argument('--test', action='store_true',
                         help='Use test set')
