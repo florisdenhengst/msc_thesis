@@ -381,12 +381,19 @@ class ConvDecoder(nn.Module):
             output = self.fc_out(self.dropout(conved))                  #output = [batch size, trg len, output dim]
 
             if sample:
-                out_tokens = torch.multinomial(output[:, -1, :], 1) 
+                # print('sample')
+                out_tokens = torch.multinomial(F.softmax(output[:, -1, :]), 1) 
+                # print(out_tokens.shape)
             elif greedy:
-                out_tokens = torch.argmax(output, dim=2)[:, -1]
+                # print('greedy')
+                out_tokens = torch.argmax(output, dim=2)[:, -1].unsqueeze(1)
+                # print(out_tokens.shape)
 
-            out_tokens = out_tokens.unsqueeze(1)
+            # out_tokens = out_tokens
+            # print(out_tokens.shape)
+            # print(trg_tokens.shape)
             trg_tokens = torch.cat((trg_tokens, out_tokens), dim=1)
+            
             previous_pos = pos
             previous_tok = tok
 
