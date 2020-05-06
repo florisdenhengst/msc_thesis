@@ -4,6 +4,7 @@ import sys
 import math
 import time
 import random
+import statistics
 
 import spacy
 import torch
@@ -541,7 +542,82 @@ def train():
         control_tokens = length_tokens
     
 
-    if args.test:
+    if args.timing and args.reinforcement and not args.full_train:
+        timings = {'no_grad': [], 'grad': [], 'teacherforced': []}
+
+        with model.eval() and torch.no_grad():
+            for batch in train_iter:
+                start = time.time()
+
+                story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                sample_output, output_tokens, baseline_tokens = model.rl_inference(story.to(device), sos_idx, eos_idx)
+                
+                baseline_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in baseline_tokens]
+                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_tokens]
+                
+                sample_output = sample_output.contiguous().view(-1, sample_output.shape[-1])
+                sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
+
+                loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
+                rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
+                rewards = rewards.to(device)
+                loss = torch.mul(rewards.unsqueeze(1), loss)
+                loss = loss.mean()
+
+                end = time.time()
+                timings['no_grad'].append(end-start)
+
+        logger.info(f'Without gradients, {sum(timings['no_grad'])} seconds taken to go over {len(train_iter)} batches of size {args.batch_size}')
+        logger.info(f'That is {sum(timings['no_grad']) / len(timings['no_grad'])} seconds per batch on average. Standard deviation: {statistics.stdev(timings['no_grad'])}')
+        logger.info(f'Minimum time taken: {min(timings['no_grad'])} seconds.')
+        logger.info(f'Maximum time taken: {max(timings['no_grad'])} seconds.')
+        for batch in train_iter:
+                start = time.time()
+
+                story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                sample_output, output_tokens, baseline_tokens = model.rl_inference(story.to(device), sos_idx, eos_idx)
+                
+                baseline_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in baseline_tokens]
+                output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_tokens]
+                
+                sample_output = sample_output.contiguous().view(-1, sample_output.shape[-1])
+                sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
+
+                loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
+                rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
+                rewards = rewards.to(device)
+                loss = torch.mul(rewards.unsqueeze(1), loss)
+                loss = loss.mean()
+
+                end = time.time()
+                timings['grad'].append(end-start)
+        logger.info(f'Without gradients, {sum(timings['grad'])} seconds taken to go over {len(train_iter)} batches of size {args.batch_size}')
+        logger.info(f'That is {sum(timings['grad']) / len(timings['grad'])} seconds per batch on average. Standard deviation: {statistics.stdev(timings['grad'])}')
+        logger.info(f'Minimum time taken: {min(timings['grad'])} seconds.')
+        logger.info(f'Maximum time taken: {max(timings['grad'])} seconds.')
+
+        for batch in train_iter:
+                start = time.time()
+
+                story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                output, _ = model(story.to(device), summary_to_pass.to(device)) # second output is attention 
+                output_tokens = torch.argmax(output, dim=2)
+                summary = batch.summary[:,1:].contiguous().view(-1)
+                output = output.contiguous().view(-1, output.shape[-1])
+                loss = crossentropy(output, summary.to(device)).mean()
+
+                end = time.time()
+                timings['teacherforced'].append(end-start)
+        logger.info(f'Without gradients, {sum(timings['teacherforced'])} seconds taken to go over {len(train_iter)} batches of size {args.batch_size}')
+        logger.info(f'That is {sum(timings['teacherforced']) / len(timings['teacherforced'])} seconds per batch on average. Standard deviation: {statistics.stdev(timings['teacherforced'])}')
+        logger.info(f'Minimum time taken: {min(timings['teacherforced'])} seconds.')
+        logger.info(f'Maximum time taken: {max(timings['teacherforced'])} seconds.')
+
+
+
+
+
+    elif args.test:
         test_rouge = None
         no_control_rouge = None
         batch_count = 0
@@ -552,7 +628,7 @@ def train():
         
 
         with model.eval() and torch.no_grad():
-            for no, batch in enumerate(test_iter):
+            for batch in enumeratetest_iter:
                 batch_count += 1
                 
                 if 'sentiment' in controls:
@@ -579,12 +655,11 @@ def train():
                 for i, r in enumerate(rouge_for_all):
                     rouge_scores, _ = calculate_rouge(summary_to_rouge, outputs[2][i], rouge, r)
                     rouge_for_all[i] = rouge_scores  
-                if no % 10 == 0:
-                    logger.info(f'Processed {no+1} batches.')
+                if batch_count % 10 == 0:
+                    logger.info(f'Processed {batch_count} batches.')
                     logger.info(f'True summary: {summary_to_rouge[0]}')
                     for i, lt in enumerate(control_tokens):
                         logger.info(f'Control category {lt}, output: {outputs[2][i][0]}')
-                    # logger.info(f'Average loss: {epoch_loss / no}.')
                     logger.info(f'Control performance: {total_control_performance}')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
             logger.info(f'Processed {batch_count} batches.')
@@ -641,8 +716,6 @@ def train():
                     story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                 
 
-                #logger.info(sentiment_codes)
-                
                 if args.reinforcement:
                     if args.ml_reinforcement:
                         output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), sos_idx, eos_idx)
