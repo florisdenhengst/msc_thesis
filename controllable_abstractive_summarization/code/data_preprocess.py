@@ -341,10 +341,11 @@ def anonymize_and_bpe_data(data_path=Path(Path.cwd(), 'data/'), sources=['cnn', 
             pattern = '@{3} enti@{2} ty@{2} (\d+@@ )*\d+(?!@)'
             original_summary = sample['summary']
             sample['story'] = re.sub(pattern, repl, bpencoder.encode(sample['story']))
+            post_bpe_lengths['story'].append(len(sample['story'].split(' ')))
             if post_bpe_lengths['story'][-1] > 1000:
                 # 1 story that contains the number Pi here; clean it
                 continue
-            post_bpe_lengths['story'].append(len(sample['story'].split(' ')))
+            
             
             sample['summary'] = re.sub(pattern, repl, bpencoder.encode(sample['summary']))
             post_bpe_lengths['summary'].append(len(sample['summary'].split(' ')))

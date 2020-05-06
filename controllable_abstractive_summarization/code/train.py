@@ -626,7 +626,7 @@ def train():
             logger.info(f'Training, epoch {epoch}.')
 
             # Train epoch
-            for no, batch in enumerate(train_iter):
+            for batch in train_iter:
                 if batch.story.shape[1] > max_len:
                     continue
                 if batch.summary.shape[1] > max_len:
@@ -696,11 +696,17 @@ def train():
 
                 epoch_loss += loss.item()
                 no_samples += len(batch.story)
-                if no % 500 == 0 and no != 0:
-                    logger.info(f'Batch {no}, processed {no_samples} stories.')
+                if args.full_train:
+                    print_condition = (batch_count - 1) % 500 == 0
+                else:
+                    print_condition = True
+
+                if print_condition:
+                    logger.info(f'Batch {batch_count}, processed {no_samples} stories.')
                     logger.info(summary_to_rouge[0])
                     logger.info(output_to_rouge[0])
-                    logger.info(f'Average loss: {epoch_loss / no}.')
+                    logger.info(baseline_to_rouge[0])
+                    logger.info(f'Average loss: {epoch_loss / batch_count}.')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
                     logger.info(f'Control performance: {[score / count for score, count in zip(train_controls, len_train_controls)]}.')
 
