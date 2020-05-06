@@ -664,15 +664,15 @@ def train():
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
                     rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
 
-                    for no, group in enumerate(sentiment_codes):
+                    for ind, group in enumerate(sentiment_codes):
                         if group == '<pos>':
-                            train_controls[0] += sentiments[no]
+                            train_controls[0] += sentiments[ind]
                             len_train_controls[0] += 1
                         elif group == '<neg>':
-                            train_controls[1] += sentiments[no]
+                            train_controls[1] += sentiments[ind]
                             len_train_controls[1] += 1
                         elif group == '<neu>':
-                            train_controls[2] += sentiments[no]
+                            train_controls[2] += sentiments[ind]
                             len_train_controls[2] += 1
 
                     loss = torch.mul(rewards.unsqueeze(1), loss)
@@ -788,6 +788,7 @@ def train():
 
             # Saving model if validation loss decreasing
             logger.info(metrics)
+            logger.info(control_performance)
             if epoch > 1:
                 if metrics['val_loss'][-1] < metrics['val_loss'][-2]:
                     save_model(model, save_model_path, epoch)    
