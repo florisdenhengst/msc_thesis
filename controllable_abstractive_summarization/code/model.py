@@ -360,6 +360,7 @@ class ConvDecoder(nn.Module):
                                           self.kernel_size - 1).fill_(self.padding_idx).to(self.device)   
                 padded_conv_input = torch.cat((padding, 
                                             conv_input), dim = 2)           #padded_conv_input = [batch size, hid dim, trg len + kernel size - 1]
+
                 conved = conv(padded_conv_input)                        #conved = [batch size, 2 * hid dim, trg len]
                 conved = F.glu(conved, dim = 1)                         #conved = [batch size, hid dim, trg len]
                 if i % 2 == 0:
@@ -371,8 +372,7 @@ class ConvDecoder(nn.Module):
                     if attn is not None:
                         conved = attn(conved)
                         conved = conved.permute(0, 2, 1) * self.scale
-                # print(conved.shape)
-                # print(conv_input.shape)
+
                 conved = (conved + conv_input) * self.scale             #conved = [batch size, hid dim, trg len]
                 conv_input = conved
                 
@@ -381,17 +381,10 @@ class ConvDecoder(nn.Module):
             output = self.fc_out(self.dropout(conved))                  #output = [batch size, trg len, output dim]
 
             if sample:
-                # print('sample')
-                out_tokens = torch.multinomial(F.softmax(output[:, -1, :]), 1) 
-                # print(out_tokens.shape)
+                out_tokens = torch.multinomial(F.softmax(output[:, -1, :], dim=1), 1) 
             elif greedy:
-                # print('greedy')
                 out_tokens = torch.argmax(output, dim=2)[:, -1].unsqueeze(1)
-                # print(out_tokens.shape)
 
-            # out_tokens = out_tokens
-            # print(out_tokens.shape)
-            # print(trg_tokens.shape)
             trg_tokens = torch.cat((trg_tokens, out_tokens), dim=1)
             
             previous_pos = pos
