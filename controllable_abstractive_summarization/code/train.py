@@ -740,7 +740,7 @@ def train():
                     
                     if args.reinforcement:
                         sample_output = sample_output.contiguous().view(-1, sample_output.shape[-1])
-                        sample_to_loss = output_tokens[:,1].contiguous().view(-1)
+                        sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
                         loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
                         rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
 
