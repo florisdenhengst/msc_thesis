@@ -954,6 +954,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--synth', action='store_true',
                         help='Whether to use on synthetic data')
+    parser.add_argument('--timing', action='store_true',
+                        help='Whether to use time the rl experiment')
 
     args = parser.parse_args()
 
