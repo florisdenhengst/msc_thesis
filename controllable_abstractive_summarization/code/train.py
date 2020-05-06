@@ -674,7 +674,7 @@ def train():
                         elif group == '<neu>':
                             train_controls[2] += sentiments[no]
                             len_train_controls[2] += 1
-
+                    rewards = rewards.to(device)
                     loss = torch.mul(rewards.unsqueeze(1), loss)
                     loss = loss.mean()
                     if args.ml_reinforcement:
