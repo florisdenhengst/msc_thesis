@@ -567,10 +567,10 @@ def train():
                 end = time.time()
                 timings['no_grad'].append(end-start)
 
-        logger.info(f'Without gradients, {sum(timings['no_grad'])} seconds taken to go over {len(train_iter)} batches of size {args.batch_size}')
-        logger.info(f'That is {sum(timings['no_grad']) / len(timings['no_grad'])} seconds per batch on average. Standard deviation: {statistics.stdev(timings['no_grad'])}')
-        logger.info(f'Minimum time taken: {min(timings['no_grad'])} seconds.')
-        logger.info(f'Maximum time taken: {max(timings['no_grad'])} seconds.')
+        logger.info(f'Without gradients, {sum(timings["no_grad"])} seconds taken to go over {len(train_iter)} batches of size {args.batch_size}')
+        logger.info(f'That is {sum(timings["no_grad"]) / len(timings["no_grad"])} seconds per batch on average. Standard deviation: {statistics.stdev(timings["no_grad"])}')
+        logger.info(f'Minimum time taken: {min(timings["no_grad"])} seconds.')
+        logger.info(f'Maximum time taken: {max(timings["no_grad"])} seconds.')
         for batch in train_iter:
                 start = time.time()
 
@@ -591,10 +591,10 @@ def train():
 
                 end = time.time()
                 timings['grad'].append(end-start)
-        logger.info(f'Without gradients, {sum(timings['grad'])} seconds taken to go over {len(train_iter)} batches of size {args.batch_size}')
-        logger.info(f'That is {sum(timings['grad']) / len(timings['grad'])} seconds per batch on average. Standard deviation: {statistics.stdev(timings['grad'])}')
-        logger.info(f'Minimum time taken: {min(timings['grad'])} seconds.')
-        logger.info(f'Maximum time taken: {max(timings['grad'])} seconds.')
+        logger.info(f'Without gradients, {sum(timings["grad"])} seconds taken to go over {len(train_iter)} batches of size {args.batch_size}')
+        logger.info(f'That is {sum(timings["grad"]) / len(timings["grad"])} seconds per batch on average. Standard deviation: {statistics.stdev(timings["grad"])}')
+        logger.info(f'Minimum time taken: {min(timings["grad"])} seconds.')
+        logger.info(f'Maximum time taken: {max(timings["grad"])} seconds.')
 
         for batch in train_iter:
                 start = time.time()
@@ -608,10 +608,10 @@ def train():
 
                 end = time.time()
                 timings['teacherforced'].append(end-start)
-        logger.info(f'Without gradients, {sum(timings['teacherforced'])} seconds taken to go over {len(train_iter)} batches of size {args.batch_size}')
-        logger.info(f'That is {sum(timings['teacherforced']) / len(timings['teacherforced'])} seconds per batch on average. Standard deviation: {statistics.stdev(timings['teacherforced'])}')
-        logger.info(f'Minimum time taken: {min(timings['teacherforced'])} seconds.')
-        logger.info(f'Maximum time taken: {max(timings['teacherforced'])} seconds.')
+        logger.info(f'Without gradients, {sum(timings["teacherforced"])} seconds taken to go over {len(train_iter)} batches of size {args.batch_size}')
+        logger.info(f'That is {sum(timings["teacherforced"]) / len(timings["teacherforced"])} seconds per batch on average. Standard deviation: {statistics.stdev(timings["teacherforced"])}')
+        logger.info(f'Minimum time taken: {min(timings["teacherforced"])} seconds.')
+        logger.info(f'Maximum time taken: {max(timings["teacherforced"])} seconds.')
 
 
 
