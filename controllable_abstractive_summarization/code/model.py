@@ -394,7 +394,7 @@ class ConvDecoder(nn.Module):
                 if ind.tolist()[0] == eos_idx:
                     batch_complete[j] = True
             if sum(batch_complete) == len(batch_complete):
-                print('stop early')
+                # print('stop early')
                 break
             
         return output, trg_tokens        

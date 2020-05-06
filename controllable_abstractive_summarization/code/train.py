@@ -708,8 +708,10 @@ def train():
                     logger.info(baseline_to_rouge[0])
                     logger.info(f'Average loss: {epoch_loss / batch_count}.')
                     logger.info(f'Latest ROUGE: {temp_scores}.')
-                    logger.info(f'Control performance: {[score / count for score, count in zip(train_controls, len_train_controls)]}.')
-
+                    try:
+                        logger.info(f'Control performance: {[score / count for score, count in zip(train_controls, len_train_controls)]}.')
+                    except ZeroDivisionError:
+                        logger.info(f'Cannot show control performance yet.')
                     end = time.time()
                     logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
 
