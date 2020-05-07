@@ -276,20 +276,26 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             
     return sentiment_codes
 
-def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes):
+def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge=None, baseline_rouge=None):
     sid = SentimentIntensityAnalyzer()
     rewards = []
     sentiments = []
-    for sample, baseline, sentiment in zip(output_to_rouge, baseline_to_rouge, sentiment_codes):
+    if output_rouge is None and baseline_rouge is None:
+        output_rouge = [0 for i in range(len(output_to_rouge))] 
+        baseline_rouge = [1 for i in range(len(output_to_rouge))] 
+    else:
+        output_rouge = [score['rouge-l']['f'] for score in output_rouge]
+        baseline_rouge = [score['rouge-l']['f'] for score in baseline_rouge]
+    for sample, baseline, sentiment, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge):
         r_sample = sid.polarity_scores(sample)['compound']
         sentiments.append(r_sample)
         r_baseline = sid.polarity_scores(baseline)['compound']
         if sentiment == '<pos>':
-            rewards.append(r_baseline - r_sample)
+            rewards.append((r_baseline - r_sample) * (b_rouge - s_rouge))
         elif sentiment == '<neg>':
-            rewards.append(r_sample - r_baseline)
+            rewards.append((r_sample - r_baseline) * (b_rouge - s_rouge))
         elif sentiment == '<neu>':
-            rewards.append(abs(r_baseline - r_sample))
+            rewards.append(abs(r_baseline - r_sample) * (b_rouge - s_rouge))
     return torch.tensor(rewards), sentiments
 
 
@@ -728,14 +734,15 @@ def train():
 
                 output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_tokens]
                 
-                rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores)
+                rouge_scores, output_rouge = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores)
+                _, baseline_rouge = calculate_rouge(summary_to_rouge, baseline_to_rouge, rouge, None)
                 
                 if args.reinforcement:
                     sample_output = sample_output.contiguous().view(-1, sample_output.shape[-1])
                     sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
 
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                    rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
+                    rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge)
 
                     for ind, group in enumerate(sentiment_codes):
                         if group == '<pos>':
