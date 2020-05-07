@@ -276,11 +276,11 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             
     return sentiment_codes
 
-def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None):
+def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None, rouge=None):
     sid = SentimentIntensityAnalyzer()
     rewards = []
     sentiments = []
-    if do_rouge and summary_to_rouge is not None:
+    if do_rouge and summary_to_rouge is not None and rouge is not None:
         temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
         output_rouge = [score['rouge-l']['f'] for score in temp_scores]
         temp_scores = rouge.get_scores(baseline_to_rouge, summary_to_rouge, avg=False)
@@ -744,7 +744,7 @@ def train():
                     sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
 
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                    rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, rouge=True, summary_to_rouge=summary_to_rouge)
+                    rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=True, summary_to_rouge=summary_to_rouge, rouge=rouge)
 
                     for ind, group in enumerate(sentiment_codes):
                         if group == '<pos>':
