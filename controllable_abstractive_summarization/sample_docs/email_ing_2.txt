@@ -1,0 +1,14 @@
+Dear Dirk,
+
+Hope everything ​is going well during these times. It's unfortunate we could not hold the meeting on discussing potential applications of text summarization in the Lending Tribe last week, but I understand that given the adjustment process and the infrastructural questions surrounding the new work-from-home paradigm it is challenging to proceed with non-core projects. 
+​
+I am working on a text summarization system that can potentially be applied for various use cases within ING, including but not limited to generating automatic summaries to enhance the work of KYC analysts working with large volumes of textual documents or using the system to tailor content provided to customers of ING products. As with most other machine learning applications, this system however requires training data. While I use publicly available datasets to develop and benchmark the system, data relevant to the use case is needed to make it suitable for use within ING. 
+
+I was wondering if this sounds like something that could be interesting for the Lending Tribe? In this cooperation, we would need to a) define a suitable use case ​within the Lending Tribe, and b) consider if there are is any data available for the use case. I understand that this could be a big commitment, but I would be glad to have the opportunity to at least discuss the possibilities here. 
+
+On a final note, if you are more interested in how the summarization system works, I have prepared a presentation for a knowledge sharing session last week, and I am attaching the slides to this email; it is rather technical but it also contains examples of how it is used in industry and instances of automatically generated summaries. If you are interested, I can of course also walk you through more details on how the system works myself.
+
+Thanks for your time!
+
+Stay safe and best regards, 
+Azamat
