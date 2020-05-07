@@ -276,16 +276,18 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             
     return sentiment_codes
 
-def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge=None, baseline_rouge=None):
+def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None):
     sid = SentimentIntensityAnalyzer()
     rewards = []
     sentiments = []
-    if output_rouge is None and baseline_rouge is None:
+    if do_rouge and summary_to_rouge is not None:
+        temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
+        output_rouge = [score['rouge-l']['f'] for score in temp_scores]
+        temp_scores = rouge.get_scores(baseline_to_rouge, summary_to_rouge, avg=False)
+        baseline_rouge = [score['rouge-l']['f'] for score in temp_scores]
+    else:
         output_rouge = [0 for i in range(len(output_to_rouge))] 
         baseline_rouge = [1 for i in range(len(output_to_rouge))] 
-    else:
-        output_rouge = [score['rouge-l']['f'] for score in output_rouge]
-        baseline_rouge = [score['rouge-l']['f'] for score in baseline_rouge]
     for sample, baseline, sentiment, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge):
         r_sample = sid.polarity_scores(sample)['compound']
         sentiments.append(r_sample)
@@ -327,6 +329,7 @@ def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, r
     return story, summary_to_rouge, summary_to_pass, lead_3
 
 def calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores):
+    
     try:
         temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=True)
     except RecursionError:
@@ -735,14 +738,13 @@ def train():
                 output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_tokens]
                 
                 rouge_scores, output_rouge = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores)
-                _, baseline_rouge = calculate_rouge(summary_to_rouge, baseline_to_rouge, rouge, None)
                 
                 if args.reinforcement:
                     sample_output = sample_output.contiguous().view(-1, sample_output.shape[-1])
                     sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
 
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                    rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge)
+                    rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, rouge=True, summary_to_rouge=summary_to_rouge)
 
                     for ind, group in enumerate(sentiment_codes):
                         if group == '<pos>':
@@ -787,7 +789,7 @@ def train():
                     logger.info(output_to_rouge[0])
                     logger.info(baseline_to_rouge[0])
                     logger.info(f'Average loss: {epoch_loss / batch_count}.')
-                    logger.info(f'Latest ROUGE: {temp_scores}.')
+                    logger.info(f'Latest ROUGE: {output_rouge}.')
                     try:
                         logger.info(f'Control performance: {[score / count for score, count in zip(train_controls, len_train_controls)]}.')
                     except ZeroDivisionError:
