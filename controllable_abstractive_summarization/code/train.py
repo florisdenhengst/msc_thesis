@@ -435,8 +435,12 @@ def train():
             sort_key=lambda x:(len(x.story), len(x.summary)), shuffle=True, train=True)
         val_iter = BucketIterator(dataset=val_data, batch_size=args.batch_size, 
             sort_key=lambda x:(len(x.story), len(x.summary)), shuffle=True, train=False)
-        txt_field.build_vocab(train_data, val_data)
-        txt_nonseq_field.build_vocab(train_data, val_data)
+        if args.epoch != 0:
+            txt_field.build_vocab()
+            txt_nonseq_field.build_vocab()
+        else:
+            txt_field.build_vocab(train_data, val_data)
+            txt_nonseq_field.build_vocab(train_data, val_data)
 
         #Check for consistency of random seed
         sample = next(iter(train_iter))
@@ -634,9 +638,9 @@ def train():
         for text_path in text_paths:
             text = preprocess_text(text_path)
             texts.extend(text)
-            print(len(texts))    
+        
         batch = txt_field.process(texts)
-        logger.info(f'How many OOV tokens per text: {[sum([n == 0 for n in nn]) for nn in num]}')
+        logger.info(f'How many OOV tokens per text: {[sum([n == 0 for n in nn]) for nn in batch]}')
         logger.info(f'{batch.shape[0]} texts')
         output = model.inference(batch.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
         summaries = prepare_summaries(torch.tensor(output), txt_field, output=False)
