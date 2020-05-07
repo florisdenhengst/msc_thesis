@@ -635,6 +635,7 @@ def train():
     elif args.generate:
         text_paths = os.listdir(Path(Path.cwd(), 'sample_docs/'))
         batch = []
+        logger.info(text_paths)
         for no, text_path in enumerate(text_paths):
             text = preprocess_text(text_path)        
             batch.extend(text)
@@ -643,7 +644,7 @@ def train():
                 print(f'How many OOV tokens per text: {[sum([oov == 0 for oov in txt]) for txt in batch]}')
                 print(f'{batch.shape} shape')
                 output = model.inference(batch.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
-                summaries = prepare_summaries(torch.tensor(output), txt_field, output=False)
+                summaries, _ = prepare_summaries(torch.tensor(output), txt_field, output=False)
                 logger.info(summaries)
                 batch = []
         
