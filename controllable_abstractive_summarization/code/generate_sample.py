@@ -50,13 +50,16 @@ if __name__ == '__main__':
 
 
     text_paths = os.listdir(Path(Path.cwd(), 'sample_docs/'))
-    texts = []
-    for text_path in text_paths:
-        text = preprocess_text(text_path)
-        texts.extend(text)
-        print(len(texts))    
-    num = txt_field.process(texts)
-    print([sum([n == 0 for n in nn]) for nn in num])
-    print(num.shape)
+
+    batch = []
+    for no, text_path in enumerate(text_paths):
+        text = preprocess_text(text_path)        
+        batch.extend(text)
+        if len(batch) == 2 or no == len(text_paths) - 1:
+            batch = txt_field.process(batch)
+            print(f'How many OOV tokens per text: {[sum([oov == 0 for oov in txt]) for txt in batch]}')
+            print(f'{batch.shape} shape')
+            batch = []
+
 
 
