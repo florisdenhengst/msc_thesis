@@ -276,11 +276,11 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             
     return sentiment_codes
 
-def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None):
+def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None, rouge=None):
     sid = SentimentIntensityAnalyzer()
     rewards = []
     sentiments = []
-    if do_rouge and summary_to_rouge is not None:
+    if do_rouge and summary_to_rouge is not None and rouge is not None:
         temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
         output_rouge = [score['rouge-l']['f'] for score in temp_scores]
         temp_scores = rouge.get_scores(baseline_to_rouge, summary_to_rouge, avg=False)
@@ -747,7 +747,9 @@ def train():
 
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
                     if args.rouge_scaling:
-                        rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, rouge=True, summary_to_rouge=summary_to_rouge)
+                        rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=True, summary_to_rouge=summary_to_rouge, rouge=rouge)
+                    else:
+                        rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False)
 
                     for ind, group in enumerate(sentiment_codes):
                         if group == '<pos>':
@@ -968,6 +970,8 @@ if __name__ == '__main__':
                         help='Whether to use on synthetic data')
     parser.add_argument('--timing', action='store_true',
                         help='Whether to use time the rl experiment')
+    parser.add_argument('--rouge_scaling', action='store_true',
+                        help='Whether to scale reward by rouge for rl experiment')
 
     args = parser.parse_args()
 
