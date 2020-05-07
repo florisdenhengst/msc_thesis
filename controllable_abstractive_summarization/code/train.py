@@ -23,6 +23,7 @@ from torchtext.data import Field, TabularDataset, Iterator, BucketIterator
 from data_preprocess import anonymize_and_bpe_data
 from artificial_data_preprocess import Synthetic
 from model import ControllableSummarizer
+from generate_sample import preprocess_text
 
 from synthetic import train_synth
 
@@ -627,6 +628,21 @@ def train():
 
 
 
+    elif args.generate:
+        text_paths = os.listdir(Path(Path.cwd(), 'sample_docs/'))
+        texts = []
+        for text_path in text_paths:
+            text = preprocess_text(text_path)
+            texts.extend(text)
+            print(len(texts))    
+        batch = txt_field.process(texts)
+        logger.info(f'How many OOV tokens per text: {[sum([n == 0 for n in nn]) for nn in num]}')
+        logger.info(f'{batch.shape[0]} texts')
+        output = model.inference(batch.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
+        summaries = prepare_summaries(torch.tensor(output), txt_field, output=False)
+        for summary in summaries:
+            logger.info(summary)
+
 
     elif args.test:
         test_rouge = None
@@ -639,7 +655,7 @@ def train():
         
 
         with model.eval() and torch.no_grad():
-            for batch in enumeratetest_iter:
+            for batch in test_iter:
                 batch_count += 1
                 
                 if 'sentiment' in controls:
@@ -972,6 +988,8 @@ if __name__ == '__main__':
                         help='Whether to use time the rl experiment')
     parser.add_argument('--rouge_scaling', action='store_true',
                         help='Whether to scale reward by rouge for rl experiment')
+    parser.add_argument('--generate', action='store_true',
+                        help='Demo')
 
     args = parser.parse_args()
 
