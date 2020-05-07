@@ -50,6 +50,7 @@ if __name__ == '__main__':
 
 
     text_paths = os.listdir(Path(Path.cwd(), 'sample_docs/'))
+    print(text_paths)
 
     batch = []
     for no, text_path in enumerate(text_paths):
