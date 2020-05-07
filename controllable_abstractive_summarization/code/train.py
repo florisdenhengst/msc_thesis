@@ -530,10 +530,12 @@ def train():
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
         no_params = sum([np.prod(p.size()) for p in model_parameters])
         logger.info(f'{no_params} trainable parameters in the model.')
-        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.99, nesterov=True)
+        
         if args.reinforcement:
+            optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.99, nesterov=True)
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
         else:
+            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
     crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx, reduction='none')
     if args.ml_reinforcement:
@@ -744,7 +746,8 @@ def train():
                     sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
 
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                    rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, rouge=True, summary_to_rouge=summary_to_rouge)
+                    if args.rouge_scaling:
+                        rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, rouge=True, summary_to_rouge=summary_to_rouge)
 
                     for ind, group in enumerate(sentiment_codes):
                         if group == '<pos>':
