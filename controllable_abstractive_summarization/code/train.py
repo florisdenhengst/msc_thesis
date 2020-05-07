@@ -634,19 +634,17 @@ def train():
 
     elif args.generate:
         text_paths = os.listdir(Path(Path.cwd(), 'sample_docs/'))
-        texts = []
-        for text_path in text_paths:
-            text = preprocess_text(text_path)
-            texts.extend(text)
-        
-        batch = txt_field.process(texts)
-        logger.info(f'How many OOV tokens per text: {[sum([n == 0 for n in nn]) for nn in batch]}')
-        logger.info(f'{batch.shape[0]} texts')
-        output = model.inference(batch.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
-        summaries = prepare_summaries(torch.tensor(output), txt_field, output=False)
-        for summary in summaries:
-            logger.info(summary)
 
+        for text_path in text_paths:
+            text = preprocess_text(text_path)        
+            batch = txt_field.process(text)
+            
+            logger.info(f'How many OOV tokens per text: {[sum([oov == 0 for oov in txt]) for txt in batch]}')
+            logger.info(f'{batch.shape[0]} texts')
+            output = model.inference(batch.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
+            summaries = prepare_summaries(torch.tensor(output), txt_field, output=False)
+            logger.info(summaries)
+        
 
     elif args.test:
         test_rouge = None
