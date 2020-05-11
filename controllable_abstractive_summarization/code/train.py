@@ -172,14 +172,10 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
     # Inference on input w/o control code
     output = model.inference(batch.story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
     output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
-    no_control_output = output_to_rouge
 
-    # Inference on input with native control code
-    # story = prepare_story_for_control_test(batch.story, txt_field, control=control, control_codes=native_controls)
-    # output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
-    # output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
-    # outputs.append(output_to_rouge)
-    # native_results = control_evl_fn(output_to_rouge, batch.summary, story, txt_field)
+    # Keep track of no control inference and control performanec
+    no_control_output = output_to_rouge
+    no_control_results = control_evl_fn(output_to_rouge, batch.summary, story, txt_field)
 
     # Inference on input over all control codes
     flex_results = []
@@ -194,26 +190,24 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
         output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
         
         flex_outputs.append(output_to_rouge)
+        # Save results on control performance, per story for all control codes
         flex_results.append(control_evl_fn(output_to_rouge, batch.summary, story, txt_field))
 
+        # Track if the flex control is native for one of the stories in the batch
+        # If so, add generated summary and control performance to the respective lists
         native_index = [i for i, x in enumerate(native_controls) if x == flex[0]]
         if len(native_index) > 0:
             for ind in native_index:
                 native_output[ind] = output_to_rouge[ind]
-                native_results[ind] = flex_results[-1]['output'][ind]
+                native_results[ind] = {kkey: flex_results[-1][kkey][ind] for kkey in flex_results[-1].keys()}
     
     outputs = (no_control_output, native_output, flex_outputs)
+    results = (no_control_results, native_results, flex_results)
     
-    length_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
+    control_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
     
-    return outputs, length_performance
+    return outputs, control_performance, results
 
-    # return outputs, native_results, flex_results
-
-    # output_to_rouge, native_results, flex_results = test_on_control(model, batch, txt_field, native_controls, flex_controls, 'length', evaluate_on_length, device)
-
-    # length_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
-    # return output_to_rouge, length_performance
 
 def test_on_length(batch, txt_field, len_tokens):
     native_controls = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
@@ -234,7 +228,11 @@ def evaluate_on_length(output_to_rouge, summary, story, txt_field):
     summary_to_rouge, _ = prepare_summaries(summary, txt_field)
     length_output = [len(out.split(' ')) for out in output_to_rouge]
     length_summary = [len(summary.split(' ')) for summary in summary_to_rouge]
-    return {'output': length_output, 'summary': length_summary}
+
+    story_to_rouge, _ = prepare_summaries(story, txt_field)
+    length_story = [len(story.split(' ')) for story in story_to_rouge]
+
+    return {'output': length_output, 'summary': length_summary, 'story': length_story}
 
 def evaluate_on_sentiment(output_to_rouge, summary, story, txt_field):
     sid = SentimentIntensityAnalyzer()
@@ -243,7 +241,11 @@ def evaluate_on_sentiment(output_to_rouge, summary, story, txt_field):
     
     sentiment_output = [sid.polarity_scores(out)['compound'] for out in output_to_rouge]
     sentiment_summary = [sid.polarity_scores(summary)['compound'] for summary in summary_to_rouge]
-    return {'output': sentiment_output, 'summary': sentiment_summary}
+
+    story_to_rouge, _ = prepare_summaries(story, txt_field)
+    sentiment_story = [sid.polarity_scores(story)['compound'] for story in story_to_rouge]
+
+    return {'output': sentiment_output, 'summary': sentiment_summary, 'story': sentiment_story}
 
 
 def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
@@ -658,7 +660,8 @@ def train():
 
 
         rouge_for_all = [None for i in range(len(control_tokens))]
-        control_performance = [0 for i in range(len(control_tokens))]
+        
+        control_results = 
         
 
         with model.eval() and torch.no_grad():
@@ -667,11 +670,11 @@ def train():
                 
                 if 'sentiment' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, control_results =test_on_control(model, batch, txt_field, controls[0], (sentiment_tokens, sentiment_codes), device)
+                    outputs, batch_control_performance, results  =test_on_control(model, batch, txt_field, controls[0], (sentiment_tokens, sentiment_codes), device)
                     
                 elif 'length' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, control_results = test_on_control(model, batch, txt_field, controls[0], len_tokens, device)
+                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], len_tokens, device)
                     
 
                 start = time.time()
@@ -680,8 +683,7 @@ def train():
                 end = time.time()
                 logger.info(f'finished one control test in {end-start} seconds.')
 
-                control_performance = [all_len+ind_len for all_len, ind_len in zip(control_performance, control_results)]
-                total_control_performance = [l/batch_count for l in control_performance]
+                control_performance = [all_len+ind_len for all_len, ind_len in zip(control_performance, batch_control_performance)]
 
                 no_control_rouge, _  = calculate_rouge(summary_to_rouge, outputs[0], rouge, no_control_rouge)
                 test_rouge, temp_scores = calculate_rouge(summary_to_rouge, outputs[1], rouge, test_rouge)
@@ -694,19 +696,23 @@ def train():
                     logger.info(f'True summary: {summary_to_rouge[0]}')
                     for i, lt in enumerate(control_tokens):
                         logger.info(f'Control category {lt}, output: {outputs[2][i][0]}')
-                    logger.info(f'Control performance: {total_control_performance}')
-                    logger.info(f'Latest ROUGE: {temp_scores}.')
-            logger.info(f'Processed {batch_count} batches.')
+                    logger.info(f'Batch control performance: {batch_control_performance}')
+                    logger.info(f'Batch ROUGE: {temp_scores}.')
+
+            logger.info(f'Done testing.')
             for i, r in enumerate(rouge_for_all):
                 rouge_for_all[i] = {key: {metric: float(r[key][metric]/batch_count) for metric in r[key].keys()} for key in r.keys()}
                 logger.info(f'Rouge on test set, controls {control_tokens[i]}: {rouge_for_all[i]}.')
-            
+
             test_rouge = {key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}
             no_control_rouge = {key: {metric: float(no_control_rouge[key][metric]/batch_count) for metric in no_control_rouge[key].keys()} for key in no_control_rouge.keys()}
             logger.info(f'Rouge on test set, native controls: {test_rouge}.')
             logger.info(f'Rouge on test set, no controls: {no_control_rouge}.')
 
-            logger.info(f'Control performance: {total_control_performance}')
+            control_performance = [perf / batch_count for perf in control_performance]
+            logger.info(f'Control performance: {control_performance}')
+            with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
+                pickle.dump(metrics, file)
 
     else:
         control_performance = {'train': [[] for i in range(len(control_tokens))],
