@@ -277,7 +277,7 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             
     return sentiment_codes
 
-def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None, rouge=None):
+def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None, rouge=None, gamma_r=0.0):
     sid = SentimentIntensityAnalyzer()
     rewards = []
     sentiments = []
@@ -294,11 +294,11 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
         sentiments.append(r_sample)
         r_baseline = sid.polarity_scores(baseline)['compound']
         if sentiment == '<pos>':
-            rewards.append((r_baseline - r_sample) * (b_rouge - s_rouge))
+            rewards.append((r_baseline - r_sample) + (b_rouge - s_rouge))
         elif sentiment == '<neg>':
-            rewards.append((r_sample - r_baseline) * (b_rouge - s_rouge))
+            rewards.append((r_sample - r_baseline) + (b_rouge - s_rouge))
         elif sentiment == '<neu>':
-            rewards.append(abs(r_baseline - r_sample) * (b_rouge - s_rouge))
+            rewards.append(abs(r_baseline - r_sample) + (b_rouge - s_rouge))
     return torch.tensor(rewards), sentiments
 
 
@@ -770,7 +770,7 @@ def train():
 
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
                     if args.rouge_scaling:
-                        rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=True, summary_to_rouge=summary_to_rouge, rouge=rouge)
+                        rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=True, summary_to_rouge=summary_to_rouge, rouge=rouge, gamma_r=args.gamma_r)
                     else:
                         rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False)
 
