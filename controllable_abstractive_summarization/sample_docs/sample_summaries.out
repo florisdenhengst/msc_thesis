@@ -1,0 +1,38 @@
+Already up-to-date.
+2020-05-07 19:38:13 - Training log - INFO - Training on cuda 
+2020-05-07 19:38:13 - Training log - INFO - Started loading data...
+2020-05-07 19:38:16 - Training log - INFO - 1st train article id is tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+2020-05-07 19:38:16 - Training log - INFO - 1st val article id is tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+2020-05-07 19:38:16 - Training log - INFO - 922 train samples, 35 validation samples, 0 test samples...
+2020-05-07 19:38:16 - Training log - INFO - finished in 2.863982677459717 seconds.
+2020-05-07 19:38:16 - Training log - INFO - Started building vocabs...
+2020-05-07 19:38:16 - Training log - INFO - 19390 items in vocabulary before adding control codes.
+2020-05-07 19:38:16 - Training log - INFO - 19405 items in vocabulary after adding control codes.
+2020-05-07 19:38:16 - Training log - INFO - finished in 0.023656129837036133 seconds.
+2020-05-07 19:38:16 - Training log - INFO - Initializing model with:
+2020-05-07 19:38:16 - Training log - INFO - Input dim: 19405, output dim: 19405, emb dim: 340 hid dim: 512, 8 layers, 3x1 kernel, 0.2 dropout, sharing weights: True, maximum length: 1000.
+2020-05-07 19:38:21 - Training log - INFO - 43452169 trainable parameters in the model.
+2020-05-07 19:38:21 - Training log - INFO - ['annual_report_apple.txt', 'annual_report_press_release_apple.txt', 'email_ing.txt', 'email_ing_2.txt', 'loan_agreement.txt', 'news_ing.txt', 'news_salesforce.txt', 'news_verge.txt']
+2020-05-07 19:38:32 - Training log - INFO - ["the the @entity4 - sized company was sold in the company 's $ $ 99 million . it has been sold to customers that are not allowed to pay for them . the company has a right - to $ $ $ a total of $ $ 20 in $ 3 - the $ 4@@ 3 - per - week", 'govern@@ @entity5 of the quarter of a billion - $ 9@@ 9@@ 9 billion . $ 2@@ 1.@@ 7 billion in the last year is more $ 9@@ 1.@@ 8 billion on its revenue . the $ 4@@ 50 m increase of approximately 6@@ 3.@@ 3 billion in $ 9@@ 2.@@ 1 . the $ 2@@ 50@@ m increase was $ 2.@@ 9@@ bn , the $ 9@@ 9.@@ 7 $ 2.@@ 6 bn']
+2020-05-07 19:38:39 - Training log - INFO - ["  this test is designed , so you do n't have to be a fit . you can not practice for the test and a selection was available . it is the best test of a new test . this is a a tool that will be available for the tests , which will make a test . it 's time that the results can happen", "  the system can now have the option of an use system to tail@@ in content provided by customers of ing products , he says . it 's being challenging that they are n't available for using data . it is the answer for the system 's system works , it is rather lightweight . it is a result that can not use the technology"]
+2020-05-07 19:38:46 - Training log - INFO - ['  this loan amount of $ was made by the borrow@@ er , who was in . it is the sole time to pay for the right and any right - of - law . but there will no one have any any other or any . if they can have , it is to be paid on , but there will have no deal', 'the this agreement is to be made without notice or any any of them , and that l@@ enders may not have a proper option , says @entity196 . but it will also end the end , the agreement is not paid for the pay@@ ings . this agreement is to pay the l@@ end@@ er for any decision to pay the end']
+2020-05-07 19:38:54 - Training log - INFO - ["' in 2012 @entity0 was appointed to be an official boss in 2013 in 2013 and was sacked in january 2012 and will take in . the board will be to ' get the chance ' of his position . he will become group chief executive officer - one of the first and his peers , who has been in his job", 'research this research is a step - in challenge to help people . the study could be the latest time in research . this could have more information than the time to work . it could help more and the work they are doing at sal@@ a@@ work research is a good time to be able and in . this can let people go out on a customer , but it can help']
+How many OOV tokens per text: [tensor(3, dtype=torch.uint8), tensor(1, dtype=torch.uint8)]
+torch.Size([2, 999]) shape
+How many OOV tokens per text: [tensor(1, dtype=torch.uint8), tensor(0, dtype=torch.uint8)]
+torch.Size([2, 606]) shape
+How many OOV tokens per text: [tensor(4, dtype=torch.uint8), tensor(1, dtype=torch.uint8)]
+torch.Size([2, 1000]) shape
+How many OOV tokens per text: [tensor(1, dtype=torch.uint8), tensor(1, dtype=torch.uint8)]
+torch.Size([2, 750]) shape
+How many OOV tokens per text: [tensor(3, dtype=torch.uint8)]
+torch.Size([1, 529]) shape
+Traceback (most recent call last):
+  File "code/train.py", line 1012, in <module>
+    train()
+  File "code/train.py", line 646, in train
+    output = model.inference(batch.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
+  File "/home/aomurali/msc_thesis/controllable_abstractive_summarization/code/model.py", line 132, in inference
+    trigrams['beam_' + str(j)][b], beam_continue = check_for_trigram(int(iter_tokens[x[b][j]][b,y[b][j]]), tmp_trigrams['beam_' + str(int(x[b][j]))][b])
+IndexError: too many indices for tensor of dimension 1
+srun: error: node436: task 0: Exited with exit code 1
