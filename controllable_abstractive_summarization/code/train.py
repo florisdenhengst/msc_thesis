@@ -536,11 +536,13 @@ def train():
         no_params = sum([np.prod(p.size()) for p in model_parameters])
         logger.info(f'{no_params} trainable parameters in the model.')
         
-        if args.reinforcement:
+        if args.adam:
             optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
         else:
             optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.99, nesterov=True)
+        if args.reinforcement:
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
+        else:
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=0)
     crossentropy = nn.CrossEntropyLoss(ignore_index=padding_idx, reduction='none')
     if args.ml_reinforcement:
@@ -987,6 +989,8 @@ if __name__ == '__main__':
                         help='Optimize with reinforcement')
     parser.add_argument('--ml_reinforcement', action='store_true',
                         help='Optimize with ml and rl objectives')
+    parser.add_argument('--adam', action='store_true',
+                        help='Use Adam optimization')
     parser.add_argument('--gamma', type=float, default=0.9984,
                         help='weight for rl loss (weight for ml loss is 1 - gamma)')
 
