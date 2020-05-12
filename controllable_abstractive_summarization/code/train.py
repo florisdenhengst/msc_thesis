@@ -853,7 +853,7 @@ def train():
 
                     output_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in output_tokens]
                     
-                    rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, val_rouge_scores)
+                    val_rouge_scores, temp_scores = calculate_rouge(summary_to_rouge, output_to_rouge, rouge, val_rouge_scores)
                     
                     if args.reinforcement:
                         sample_output = sample_output.contiguous().view(-1, sample_output.shape[-1])
@@ -894,7 +894,7 @@ def train():
                         logger.info(f'True summary: {summary_to_rouge[0]}')
                     
                     val_epoch_loss += loss.item()
-                logger.info(f'Control performance: {[score / count for score, count in zip(val_controls, len_val_controls)]}.')
+                # logger.info(f'Control performance: {[score / count for score, count in zip(val_controls, len_val_controls)]}.')
 
             if args.reinforcement:
                 scheduler.step()
@@ -911,7 +911,7 @@ def train():
             metrics['train_rouge'].append(rouge_scores)
 
             control_performance['train'].append([score / batch_count for score, batch_count in zip(train_controls, len_train_controls)])
-            control_performance['val'].append([score / val_batch_count for score, val_batch_count in zip(val_controls, len_val_controls)])
+            # control_performance['val'].append([score / val_batch_count for score, val_batch_count in zip(val_controls, len_val_controls)])
 
             # Saving model if validation loss decreasing
             logger.info(metrics)
