@@ -714,8 +714,8 @@ def train():
                 pickle.dump(metrics, file)
 
     else:
-        control_performance = {'train': [[] for i in range(len(control_tokens))],
-                                'val': [[] for i in range(len(control_tokens))]}
+        control_performance = {'train': [],
+                                'val': []}
 
         while stop_condition:
             logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
@@ -931,7 +931,7 @@ def train():
             logger.info(f'Epoch {epoch} took {end-start} seconds.')
 
             if args.reinforcement:
-                stop_condition = epoch < args.max_epoch
+                stop_condition = epoch < (args.epoch + args.max_epoch)
             else:
                 stop_condition = optimizer.param_groups[0]['lr'] > 1e-5
 
