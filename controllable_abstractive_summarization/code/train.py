@@ -893,7 +893,7 @@ def train():
                         logger.info(f'Greedy prediction: {baseline_to_rouge[0]}')
                         logger.info(f'True summary: {summary_to_rouge[0]}')
                     
-                    val_epoch_loss += val_loss.item()
+                    val_epoch_loss += loss.item()
                 logger.info(f'Control performance: {[score / count for score, count in zip(val_controls, len_val_controls)]}.')
 
             if args.reinforcement:
