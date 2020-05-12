@@ -658,10 +658,9 @@ def train():
         no_control_rouge = None
         batch_count = 0
 
-
+        control_results = []
+        control_performance = [0 for i in range(len(control_tokens))]
         rouge_for_all = [None for i in range(len(control_tokens))]
-        
-        control_results = 
         
 
         with model.eval() and torch.no_grad():
@@ -876,6 +875,7 @@ def train():
                                 val_controls[2] += sentiments[no]
                                 len_val_controls[2] += 1
 
+                        rewards = rewards.to(device)
                         loss = torch.mul(rewards.unsqueeze(1), loss)
                         loss = loss.mean()
                         if args.ml_reinforcement:
@@ -894,7 +894,7 @@ def train():
                         logger.info(f'True summary: {summary_to_rouge[0]}')
                     
                     val_epoch_loss += val_loss.item()
-
+                logger.info(f'Control performance: {[score / count for score, count in zip(val_controls, len_val_controls)]}.')
 
             if args.reinforcement:
                 scheduler.step()
