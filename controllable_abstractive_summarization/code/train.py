@@ -826,10 +826,13 @@ def train():
                     logger.info(baseline_to_rouge[0])
                     logger.info(f'Average loss: {epoch_loss / batch_count}.')
                     logger.info(f'Latest ROUGE: {output_rouge}.')
-                    try:
-                        logger.info(f'Control performance: {[score / count for score, count in zip(train_controls, len_train_controls)]}.')
-                    except ZeroDivisionError:
-                        logger.info(f'Cannot show control performance yet.')
+
+                    for n, score_count in enumerate(zip(train_controls, len_train_controls)):                        
+                        try:
+                            logger.info(f'{control_tokens[n]} performance: {score_count[0] / score_count[1]}.')
+                        except ZeroDivisionError:
+                            logger.info(f'Cannot show {control_tokens[n]} performance yet.')
+
                     end = time.time()
                     logger.info(f'Epoch {epoch} running already for {end-start} seconds.')
 
@@ -913,8 +916,13 @@ def train():
             metrics['train_loss'].append(epoch_loss / batch_count)
             metrics['train_rouge'].append(rouge_scores)
 
+            for n, lens in enumerate(zip(len_train_controls, len_val_controls)):
+                if lens[0] == 0:
+                    len_train_controls[n] = 1
+                if lens[1] == 0:
+                    len_val_controls[n] = 1
             control_performance['train'].append([score / batch_count for score, batch_count in zip(train_controls, len_train_controls)])
-            # control_performance['val'].append([score / val_batch_count for score, val_batch_count in zip(val_controls, len_val_controls)])
+            control_performance['val'].append([score / val_batch_count for score, val_batch_count in zip(val_controls, len_val_controls)])
 
             # Saving model if validation loss decreasing
             logger.info(metrics)
@@ -937,6 +945,8 @@ def train():
             
             with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
                 pickle.dump(metrics, file)
+            with open(Path(save_model_path, 'control_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
+                pickle.dump(control_performance, file)
 
             logger.info(f'Recursion error count at {recursion_count}.')
 
