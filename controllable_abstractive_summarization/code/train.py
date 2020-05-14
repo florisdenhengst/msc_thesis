@@ -268,13 +268,16 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             else:
                 sentiment_codes.append('<neu>')
         else:
-            coin = random.random()
-            if coin >= 2/3:
+            if args.only_pos:
                 sentiment = '<pos>'
-            elif coin >= 1/3:
-                sentiment = '<neg>'
             else:
-                sentiment = '<neu>'
+                coin = random.random()
+                if coin >= 2/3:
+                    sentiment = '<pos>'
+                elif coin >= 1/3:
+                    sentiment = '<neg>'
+                else:
+                    sentiment = '<neu>'
             sentiment_codes.append(sentiment)
             
     return sentiment_codes
@@ -349,13 +352,13 @@ def calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores):
                 rouge_scores[key] = dict(rouge_scores[key]) 
     return rouge_scores, temp_scores
 
-def save_model(model, save_model_path, epoch):
+def save_model(model, save_model_path, epoch, save_suffix):
     Path.mkdir(save_model_path, exist_ok=True)
-    if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + '.model')):
+    if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + save_suffix + '.model')):
         logger.info('Removing model from previous epoch...')
-        Path.unlink(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + '.model'))
+        Path.unlink(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + save_suffix + '.model'))
     logger.info(f'Saving model at epoch {epoch}.')
-    torch.save(model.state_dict(), Path(save_model_path, 'summarizer_epoch_' + str(epoch) + '.model'))
+    torch.save(model.state_dict(), Path(save_model_path, 'summarizer_epoch_' + str(epoch) + save_suffix + '.model'))
 
 
 def summarize_text(text, field, model, device, bpe_applied=True, desired_length=5, desired_source='cnn', summary=None):
@@ -916,13 +919,23 @@ def train():
             # Saving model if validation loss decreasing
             logger.info(metrics)
             logger.info(control_performance)
+            save_suffix = ''
+            if args.reinforcement:
+                save_suffix += '_rl'
+            if args.reinforcement_ml:
+                save_suffix += '_ml'
+            if args.rouge_scaling:
+                save_suffix += '_rouge'
+
             if epoch > 1:
                 if metrics['val_loss'][-1] < metrics['val_loss'][-2]:
-                    save_model(model, save_model_path, epoch)    
+                    save_model(model, save_model_path, epoch, save_suffix)    
             else:
-                save_model(model, save_model_path, epoch)    
+                save_model(model, save_model_path, epoch, save_suffix)    
 
-            with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
+
+            
+            with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
                 pickle.dump(metrics, file)
 
             logger.info(f'Recursion error count at {recursion_count}.')
@@ -999,13 +1012,15 @@ if __name__ == '__main__':
                         help='Use Adam optimization')
     parser.add_argument('--gamma', type=float, default=0.9984,
                         help='weight for rl loss (weight for ml loss is 1 - gamma)')
+    parser.add_argument('--rouge_scaling', action='store_true',
+                        help='Whether to scale reward by rouge for rl experiment')
+    parser.add_argument('--only_pos', action='store_true',
+                        help='Whether to include only positive sentiment control')
 
     parser.add_argument('--synth', action='store_true',
                         help='Whether to use on synthetic data')
     parser.add_argument('--timing', action='store_true',
                         help='Whether to use time the rl experiment')
-    parser.add_argument('--rouge_scaling', action='store_true',
-                        help='Whether to scale reward by rouge for rl experiment')
     parser.add_argument('--generate', action='store_true',
                         help='Demo')
 
