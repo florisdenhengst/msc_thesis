@@ -293,17 +293,17 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
         baseline_rouge = [score['rouge-l']['f'] for score in temp_scores]
     else:
         output_rouge = [0 for i in range(len(output_to_rouge))] 
-        baseline_rouge = [1 for i in range(len(output_to_rouge))] 
+        baseline_rouge = [0 for i in range(len(output_to_rouge))] 
     for sample, baseline, sentiment, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge):
         r_sample = sid.polarity_scores(sample)['compound']
         sentiments.append(r_sample)
         r_baseline = sid.polarity_scores(baseline)['compound']
         if sentiment == '<pos>':
-            rewards.append((r_baseline - r_sample) + (b_rouge - s_rouge))
+            rewards.append((r_sample - r_baseline) + (s_rouge - b_rouge))
         elif sentiment == '<neg>':
-            rewards.append((r_sample - r_baseline) + (b_rouge - s_rouge))
+            rewards.append((r_baseline - r_sample) + (s_rouge - b_rouge))
         elif sentiment == '<neu>':
-            rewards.append(abs(r_baseline - r_sample) + (b_rouge - s_rouge))
+            rewards.append(abs(r_sample - r_baseline) + (s_rouge - b_rouge))
     return torch.tensor(rewards), sentiments
 
 
