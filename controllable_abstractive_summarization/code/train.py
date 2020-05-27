@@ -512,7 +512,15 @@ def train():
     # if args.test:
     max_len = 1000
     # else: 
+    save_suffix = ''
+    if args.reinforcement:
+        save_suffix += '_rl'
+    if args.ml_reinforcement:
+        save_suffix += '_ml'
+    if args.rouge_scaling:
+        save_suffix += '_rouge'
     
+
             
     logger.info(f'Initializing model with:') 
     logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
@@ -526,17 +534,20 @@ def train():
         model.eval()
         metrics = {'test_loss':[], 'test_rouge':[]}
     else:
-        if args.reinforcement:
-            if Path.exists(Path(save_model_path, 'summarizer.model')):
-                model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
-        elif Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')):
-            model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + '.model')))
+        if Path.exists(Path(save_model_path, 'summarizer.model')):
+            model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
+        elif Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')):
+            model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')))
             
         epoch = args.epoch
         metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
         if Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl')):
             with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl'), 'rb') as file:
                 metrics  = pickle.load(file)
+        elif Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl')):
+            with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl'), 'rb') as file:
+                metrics  = pickle.load(file)
+
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
         no_params = sum([np.prod(p.size()) for p in model_parameters])
         logger.info(f'{no_params} trainable parameters in the model.')
@@ -713,8 +724,8 @@ def train():
 
             control_performance = [perf / batch_count for perf in control_performance]
             logger.info(f'Control performance: {control_performance}')
-            with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
-                pickle.dump(metrics, file)
+            # with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
+                # pickle.dump(metrics, file)
 
     else:
         control_performance = {'train': [],
@@ -927,13 +938,6 @@ def train():
             # Saving model if validation loss decreasing
             logger.info(metrics)
             logger.info(control_performance)
-            save_suffix = ''
-            if args.reinforcement:
-                save_suffix += '_rl'
-            if args.reinforcement_ml:
-                save_suffix += '_ml'
-            if args.rouge_scaling:
-                save_suffix += '_rouge'
 
             if epoch > 1:
                 if metrics['val_loss'][-1] < metrics['val_loss'][-2]:
