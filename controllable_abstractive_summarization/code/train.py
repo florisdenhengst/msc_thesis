@@ -942,7 +942,7 @@ def train():
             if epoch > 1:
                 if args.reinforcement:
                     save_model(model, save_model_path, epoch, save_suffix)    
-                if metrics['val_loss'][-1] < metrics['val_loss'][-2]:
+                elif metrics['val_loss'][-1] < metrics['val_loss'][-2]:
                     save_model(model, save_model_path, epoch, save_suffix)    
             else:
                 save_model(model, save_model_path, epoch, save_suffix)    
