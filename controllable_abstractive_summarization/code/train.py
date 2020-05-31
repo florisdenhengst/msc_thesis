@@ -299,6 +299,10 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
         sentiments.append(r_sample)
         r_baseline = sid.polarity_scores(baseline)['compound']
         if sentiment == '<pos>':
+            # loss = -CE
+            # loss_rl = (baseline - sample) * CE
+            # loss_in_pytorch = (sample - baseline) * loss
+            # minimize
             rewards.append((r_sample - r_baseline) + (s_rouge - b_rouge))
         elif sentiment == '<neg>':
             rewards.append((r_baseline - r_sample) + (s_rouge - b_rouge))
