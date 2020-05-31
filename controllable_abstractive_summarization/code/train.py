@@ -519,6 +519,8 @@ def train():
         save_suffix += '_ml'
     if args.rouge_scaling:
         save_suffix += '_rouge'
+    if not args.only_pos:
+        save_suffix += '_all'
     
 
             
