@@ -540,18 +540,19 @@ def train():
         model.eval()
         metrics = {'test_loss':[], 'test_rouge':[]}
     else:
-        if Path.exists(Path(save_model_path, 'summarizer.model')):
-            model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
-        elif Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')):
+        if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')):
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')))
+        elif Path.exists(Path(save_model_path, 'summarizer.model')):
+            model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
+            
             
         epoch = args.epoch
         metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
-        if Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl')):
-            with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl'), 'rb') as file:
-                metrics  = pickle.load(file)
-        elif Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl')):
+        if Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl')):
             with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl'), 'rb') as file:
+                metrics  = pickle.load(file)
+        elif Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl')):
+            with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl'), 'rb') as file:
                 metrics  = pickle.load(file)
 
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -888,13 +889,13 @@ def train():
                             rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False)
 
                         for no, group in enumerate(sentiment_codes):
-                            if group is '<pos>':
+                            if group == '<pos>':
                                 val_controls[0] += sentiments[no]
                                 len_val_controls[0] += 1
-                            elif group is '<neg>':
+                            elif group == '<neg>':
                                 val_controls[1] += sentiments[no]
                                 len_val_controls[1] += 1
-                            elif group is '<neu>':
+                            elif group == '<neu>':
                                 val_controls[2] += sentiments[no]
                                 len_val_controls[2] += 1
 
