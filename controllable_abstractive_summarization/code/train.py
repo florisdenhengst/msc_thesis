@@ -555,6 +555,13 @@ def train():
             with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl'), 'rb') as file:
                 metrics  = pickle.load(file)
 
+        control_performance = {'train': [],
+                                'val': []}
+        if Path.exists(Path(save_model_path, 'control_epoch_' + str(args.epoch) + save_suffix + '.pkl')):
+            with open(Path(save_model_path, 'control_epoch_' + str(args.epoch) + save_suffix + '.pkl'), 'rb') as file:
+                control_performance = pickle.load(file)
+
+
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
         no_params = sum([np.prod(p.size()) for p in model_parameters])
         logger.info(f'{no_params} trainable parameters in the model.')
@@ -735,8 +742,6 @@ def train():
                 # pickle.dump(metrics, file)
 
     else:
-        control_performance = {'train': [],
-                                'val': []}
 
         while stop_condition:
             logger.info(f'Current learning rate is: {optimizer.param_groups[0]["lr"]}')
