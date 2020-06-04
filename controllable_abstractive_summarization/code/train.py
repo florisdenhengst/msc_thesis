@@ -253,7 +253,9 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
     remove_tokens = ['<sos>', '<eos>', '<pad>']
     sentiment_codes = []
     for summary in summaries:
-        if not reinforcement:
+        if args.only_pos:
+            sentiment_code = '<pos>'
+        else:
             tmp = []
             for ind in summary:
                 if txt_field.vocab.itos[ind] not in remove_tokens:
@@ -261,24 +263,31 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             summary = ' '.join(tmp).replace('@@ ', '')
 
             sentiment = sid.polarity_scores(summary)['compound']
-            if sentiment > 0.05:
-                sentiment_codes.append('<pos>')
-            elif sentiment < -0.05:
-                sentiment_codes.append('<neg>')
-            else:
-                sentiment_codes.append('<neu>')
-        else:
-            if args.only_pos:
-                sentiment = '<pos>'
-            else:
+            if reinforcement:
                 coin = random.random()
-                if coin >= 2/3:
-                    sentiment = '<pos>'
-                elif coin >= 1/3:
-                    sentiment = '<neg>'
+                if sentiment > 0.05:
+                    if coin > 0.5:
+                        sentiment_code = '<neg>'
+                    else:
+                        sentiment_code = '<neu>'
+                elif sentiment < 0.05:
+                    if coin > 0.5:
+                        sentiment_code = '<pos>'
+                    else:
+                        sentiment_code = '<neu>'
                 else:
-                    sentiment = '<neu>'
-            sentiment_codes.append(sentiment)
+                    if coin > 0.5:
+                        sentiment_code = '<pos>'
+                    else:
+                        sentiment_code = '<neg>'                
+            else:
+                if sentiment > 0.05:
+                    sentiment_code = '<pos>'
+                elif sentiment < -0.05:
+                    sentiment_code = '<neg>'
+                else:
+                    sentiment_code = '<neu>'
+        sentiment_codes.append(sentiment_code)
             
     return sentiment_codes
 
@@ -286,7 +295,8 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
     sid = SentimentIntensityAnalyzer()
     rewards = []
     sentiments = []
-    if do_rouge and summary_to_rouge is not None and rouge is not None:
+    baseline_sentiments = []
+    if do_rouge:
         temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
         output_rouge = [score['rouge-l']['f'] for score in temp_scores]
         temp_scores = rouge.get_scores(baseline_to_rouge, summary_to_rouge, avg=False)
@@ -297,7 +307,10 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
     for sample, baseline, sentiment, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge):
         r_sample = sid.polarity_scores(sample)['compound']
         sentiments.append(r_sample)
+
         r_baseline = sid.polarity_scores(baseline)['compound']
+        baseline_sentiments.append(r_baseline)
+
         if sentiment == '<pos>':
             # loss = -CE
             # loss_rl = (baseline - sample) * CE
@@ -308,7 +321,7 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
             rewards.append((r_baseline - r_sample) + (s_rouge - b_rouge))
         elif sentiment == '<neu>':
             rewards.append(abs(r_sample - r_baseline) + (s_rouge - b_rouge))
-    return torch.tensor(rewards), sentiments
+    return torch.tensor(rewards), sentiments, baseline_sentiments
 
 
 
@@ -555,8 +568,8 @@ def train():
             with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl'), 'rb') as file:
                 metrics  = pickle.load(file)
 
-        control_performance = {'train': [],
-                                'val': []}
+        control_performance = {'train': {'score': [], 'count': []},
+                                'val': {'score': [], 'count': []}}
         if Path.exists(Path(save_model_path, 'control_epoch_' + str(args.epoch) + save_suffix + '.pkl')):
             with open(Path(save_model_path, 'control_epoch_' + str(args.epoch) + save_suffix + '.pkl'), 'rb') as file:
                 control_performance = pickle.load(file)
@@ -607,7 +620,7 @@ def train():
                 sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
 
                 loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
+                rewards, sentiments, _ = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
                 rewards = rewards.to(device)
                 loss = torch.mul(rewards.unsqueeze(1), loss)
                 loss = loss.mean()
@@ -632,7 +645,7 @@ def train():
                 sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
 
                 loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
+                rewards, sentiments, _ = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes)
                 rewards = rewards.to(device)
                 loss = torch.mul(rewards.unsqueeze(1), loss)
                 loss = loss.mean()
@@ -754,10 +767,9 @@ def train():
             batch_count = 0
             val_batch_count = 0
 
-            train_controls = [0 for i in range(len(control_tokens))]
-            len_train_controls = [0 for i in range(len(control_tokens))]
-            val_controls = [0 for i in range(len(control_tokens))]
-            len_val_controls = [0 for i in range(len(control_tokens))]
+            train_controls = [[] for i in range(len(control_tokens))]
+            baseline_controls = []
+            val_controls = [[] for i in range(len(control_tokens))]
 
             model.train()
 
@@ -800,21 +812,19 @@ def train():
                     sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
 
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                    if args.rouge_scaling:
-                        rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=True, summary_to_rouge=summary_to_rouge, rouge=rouge)
-                    else:
-                        rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False)
+                    rewards, sentiments, baseline_sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, 
+                                                                                        do_rouge=args.rouge_scaling, summary_to_rouge=summary_to_rouge, rouge=rouge)
 
                     for ind, group in enumerate(sentiment_codes):
                         if group == '<pos>':
-                            train_controls[0] += sentiments[ind]
-                            len_train_controls[0] += 1
+                            train_controls[0].append(sentiments[ind])
                         elif group == '<neg>':
-                            train_controls[1] += sentiments[ind]
-                            len_train_controls[1] += 1
+                            train_controls[1].append(sentiments[ind])
                         elif group == '<neu>':
-                            train_controls[2] += sentiments[ind]
-                            len_train_controls[2] += 1
+                            train_controls[2].append(sentiments[ind])
+                    
+                    baseline_controls.extend(baseline_sentiments)
+
                     rewards = rewards.to(device)
                     loss = torch.mul(rewards.unsqueeze(1), loss)
                     loss = loss.mean()
@@ -850,9 +860,9 @@ def train():
                     logger.info(f'Average loss: {epoch_loss / batch_count}.')
                     logger.info(f'Latest ROUGE: {output_rouge}.')
 
-                    for n, score_count in enumerate(zip(train_controls, len_train_controls)):                        
+                    for score in enumerate(train_controls):                        
                         try:
-                            logger.info(f'{control_tokens[n]} performance: {score_count[0] / score_count[1]}.')
+                            logger.info(f'{control_tokens[n]} performance: {sum(score) / len(score)}.')
                         except ZeroDivisionError:
                             logger.info(f'Cannot show {control_tokens[n]} performance yet.')
 
@@ -888,21 +898,16 @@ def train():
                         sample_output = sample_output.contiguous().view(-1, sample_output.shape[-1])
                         sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
                         loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                        if args.rouge_scaling:
-                            rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=True, summary_to_rouge=summary_to_rouge, rouge=rouge)
-                        else:
-                            rewards, sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False)
+                        rewards, sentiments, _ = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, 
+                                                                    do_rouge=args.rouge_scaling, summary_to_rouge=summary_to_rouge, rouge=rouge)
 
                         for no, group in enumerate(sentiment_codes):
                             if group == '<pos>':
-                                val_controls[0] += sentiments[no]
-                                len_val_controls[0] += 1
+                                val_controls[0].append(sentiments[no])
                             elif group == '<neg>':
-                                val_controls[1] += sentiments[no]
-                                len_val_controls[1] += 1
+                                val_controls[1].append(sentiments[no])
                             elif group == '<neu>':
-                                val_controls[2] += sentiments[no]
-                                len_val_controls[2] += 1
+                                val_controls[2].append(sentiments[no])
 
                         rewards = rewards.to(device)
                         loss = torch.mul(rewards.unsqueeze(1), loss)
@@ -944,8 +949,11 @@ def train():
                     len_train_controls[n] = 1
                 if lens[1] == 0:
                     len_val_controls[n] = 1
-            control_performance['train'].append([score / batch_count for score, batch_count in zip(train_controls, len_train_controls)])
-            control_performance['val'].append([score / val_batch_count for score, val_batch_count in zip(val_controls, len_val_controls)])
+            control_performance['train']['performance'].append([[sum(score)/len(score), stdev(score)] for score in train_controls])
+            control_performance['train']['count'].append([len(score) for score in train_controls])
+            control_performance['val']['performance'].append([[sum(score)/len(score), stdev(score)] for score in val_controls])
+            control_performance['val']['count'].append([len(score) for score in val_controls])
+            control_performance['baseline'].append([sum(baseline_controls) / len(baseline_controls), stdev(baseline_controls)])
 
             # Saving model if validation loss decreasing
             logger.info(metrics)
