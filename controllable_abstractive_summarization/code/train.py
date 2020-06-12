@@ -255,6 +255,8 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
     for summary in summaries:
         if args.only_pos:
             sentiment_code = '<pos>'
+        if args.only_neg:
+            sentiment_code = '<neg>'
         else:
             tmp = []
             for ind in summary:
@@ -537,7 +539,10 @@ def train():
     if args.rouge_scaling:
         save_suffix += '_rouge'
     if not args.only_pos:
-        save_suffix += '_all'
+        if args.only_neg:
+            save_suffix += '_onlyneg'
+        else:
+            save_suffix += '_all'
     
 
             
@@ -1048,6 +1053,8 @@ if __name__ == '__main__':
                         help='Whether to scale reward by rouge for rl experiment')
     parser.add_argument('--only_pos', action='store_true',
                         help='Whether to include only positive sentiment control')
+    parser.add_argument('--only_neg', action='store_true',
+                        help='Whether to include only negative sentiment control')
 
     parser.add_argument('--synth', action='store_true',
                         help='Whether to use on synthetic data')
