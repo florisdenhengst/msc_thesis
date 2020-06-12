@@ -18,7 +18,7 @@ from pathlib import Path
 import subword_nmt.apply_bpe as apply_bpe
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
+#import pandas as pd
 import torchtext.data as torchdata
 from torchtext.data import Iterator
 from torch.utils.data import Dataset

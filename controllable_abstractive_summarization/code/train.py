@@ -568,8 +568,9 @@ def train():
             with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + '.pkl'), 'rb') as file:
                 metrics  = pickle.load(file)
 
-        control_performance = {'train': {'score': [], 'count': []},
-                                'val': {'score': [], 'count': []}}
+        control_performance = {'train': {'performance': [], 'count': []},
+                                'val': {'performance': [], 'count': []},
+                                'baseline': []}
         if Path.exists(Path(save_model_path, 'control_epoch_' + str(args.epoch) + save_suffix + '.pkl')):
             with open(Path(save_model_path, 'control_epoch_' + str(args.epoch) + save_suffix + '.pkl'), 'rb') as file:
                 control_performance = pickle.load(file)
@@ -860,7 +861,7 @@ def train():
                     logger.info(f'Average loss: {epoch_loss / batch_count}.')
                     logger.info(f'Latest ROUGE: {output_rouge}.')
 
-                    for score in enumerate(train_controls):                        
+                    for n, score in enumerate(train_controls):                        
                         try:
                             logger.info(f'{control_tokens[n]} performance: {sum(score) / len(score)}.')
                         except ZeroDivisionError:
@@ -944,16 +945,11 @@ def train():
             metrics['train_loss'].append(epoch_loss / batch_count)
             metrics['train_rouge'].append(rouge_scores)
 
-            for n, lens in enumerate(zip(len_train_controls, len_val_controls)):
-                if lens[0] == 0:
-                    len_train_controls[n] = 1
-                if lens[1] == 0:
-                    len_val_controls[n] = 1
-            control_performance['train']['performance'].append([[sum(score)/len(score), stdev(score)] for score in train_controls])
+            control_performance['train']['performance'].append([[sum(score)/len(score), statistics.stdev(score)] for score in train_controls])
             control_performance['train']['count'].append([len(score) for score in train_controls])
-            control_performance['val']['performance'].append([[sum(score)/len(score), stdev(score)] for score in val_controls])
+            control_performance['val']['performance'].append([[sum(score)/len(score), statistics.stdev(score)] for score in val_controls])
             control_performance['val']['count'].append([len(score) for score in val_controls])
-            control_performance['baseline'].append([sum(baseline_controls) / len(baseline_controls), stdev(baseline_controls)])
+            control_performance['baseline'].append([sum(baseline_controls) / len(baseline_controls), statistics.stdev(baseline_controls)])
 
             # Saving model if validation loss decreasing
             logger.info(metrics)
