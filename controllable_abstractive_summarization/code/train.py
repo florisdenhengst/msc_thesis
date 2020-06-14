@@ -371,54 +371,53 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
 
 
 
-# def get_summary_source_codes(summaries, sources, txt_field):
-#     remove_tokens = ['<sos>', '<eos>', '<pad>']
-#     source_codes = []
-#     for summary, source in zip(summaries, sources):
-#         if source == 'cnn':
-#             code = 'dm'
-#         elif source == 'dm':
-#             code == 'cnn'
-#         else:
-#             coin = random.random()
-#             if coin > 0.5:
-#                 code = 'dm'
-#             else:
-#                 code = 'cnn'
-#         source_codes.append(code)
-            
-#     return sentiment_codes    
+def get_summary_source_codes(summaries, sources, txt_field):
+    remove_tokens = ['<sos>', '<eos>', '<pad>']
+    source_codes = []
+    for summary, source in zip(summaries, sources):
+        if source == 'cnn':
+            code = 'dm'
+        elif source == 'dm':
+            code == 'cnn'
+        else:
+            coin = random.random()
+            if coin > 0.5:
+                code = 'dm'
+            else:
+                code = 'cnn'
+        source_codes.append(code)
+    return sentiment_codes    
 
-# def obtain_reward_source(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None, rouge=None):
-#     rewards = []
-#     sentiments = []
-#     baseline_sentiments = []
-#     if do_rouge:
-#         temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
-#         output_rouge = [score['rouge-l']['f'] for score in temp_scores]
-#         temp_scores = rouge.get_scores(baseline_to_rouge, summary_to_rouge, avg=False)
-#         baseline_rouge = [score['rouge-l']['f'] for score in temp_scores]
-#     else:
-#         output_rouge = [0 for i in range(len(output_to_rouge))] 
-#         baseline_rouge = [0 for i in range(len(output_to_rouge))] 
-#     for sample, baseline, sentiment, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge):
-#         r_sample = sid.polarity_scores(sample)['compound']
-#         sentiments.append(r_sample)
+def obtain_reward_source(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None, rouge=None):
+    rewards = []
+    source_overlaps = []
+    baseline_sentiments = []
+    if do_rouge:
+        temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
+        output_rouge = [score['rouge-l']['f'] for score in temp_scores]
+        temp_scores = rouge.get_scores(baseline_to_rouge, summary_to_rouge, avg=False)
+        baseline_rouge = [score['rouge-l']['f'] for score in temp_scores]
+    else:
+        output_rouge = [0 for i in range(len(output_to_rouge))] 
+        baseline_rouge = [0 for i in range(len(output_to_rouge))] 
+    for sample, baseline, sentiment, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge):
+        r_sample = sid.polarity_scores(sample)['compound']
+        sentiments.append(r_sample)
 
-#         r_baseline = sid.polarity_scores(baseline)['compound']
-#         baseline_sentiments.append(r_baseline)
+        r_baseline = sid.polarity_scores(baseline)['compound']
+        baseline_sentiments.append(r_baseline)
 
-#         if sentiment == '<pos>':
-#             # loss = -CE
-#             # loss_rl = (baseline - sample) * CE
-#             # loss_in_pytorch = (sample - baseline) * loss
-#             # minimize
-#             rewards.append((r_sample - r_baseline) + (s_rouge - b_rouge))
-#         elif sentiment == '<neg>':
-#             rewards.append((r_baseline - r_sample) + (s_rouge - b_rouge))
-#         elif sentiment == '<neu>':
-#             rewards.append(abs(r_sample - r_baseline) + (s_rouge - b_rouge))
-#     return torch.tensor(rewards), sentiments, baseline_sentiments
+        if sentiment == '<pos>':
+            # loss = -CE
+            # loss_rl = (baseline - sample) * CE
+            # loss_in_pytorch = (sample - baseline) * loss
+            # minimize
+            rewards.append((r_sample - r_baseline) + (s_rouge - b_rouge))
+        elif sentiment == '<neg>':
+            rewards.append((r_baseline - r_sample) + (s_rouge - b_rouge))
+        elif sentiment == '<neu>':
+            rewards.append(abs(r_sample - r_baseline) + (s_rouge - b_rouge))
+    return torch.tensor(rewards), sentiments, baseline_sentiments
 
 
 def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=False):
@@ -661,6 +660,11 @@ def train():
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')))
         elif Path.exists(Path(save_model_path, 'summarizer.model')):
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
+        logger.info(f'Shape of word embeddings: {model.tok_embedding.weight.shape}')
+        logger.info(f'Shape of positional embeddings: {model.pos_embedding.weight.shape}')
+        batch = next(iter(train_iter))
+        logger.info(f'Batch length tokens: {batch.length_tokens}')
+        logger.info(f'Batch source tokens: {batch.source}')
             
             
         epoch = args.epoch
