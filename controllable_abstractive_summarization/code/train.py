@@ -325,8 +325,100 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
             rewards.append(abs(r_sample - r_baseline) + (s_rouge - b_rouge))
     return torch.tensor(rewards), sentiments, baseline_sentiments
 
+# def get_summary_length_codes(summaries, txt_field):
+#     remove_tokens = ['<sos>', '<eos>', '<pad>']
+#     sentiment_codes = []
+#     for summary in summaries:
+#         if args.only_pos:
+#             sentiment_code = '<pos>'
+#         if args.only_neg:
+#             sentiment_code = '<neg>'
+#         else:
+#             tmp = []
+#             for ind in summary:
+#                 if txt_field.vocab.itos[ind] not in remove_tokens:
+#                     tmp.append(txt_field.vocab.itos[ind])
+#             summary = ' '.join(tmp).replace('@@ ', '')
+
+#             sentiment = sid.polarity_scores(summary)['compound']
+#             if reinforcement:
+#                 coin = random.random()
+#                 if sentiment > 0.05:
+#                     if coin > 0.5:
+#                         sentiment_code = '<neg>'
+#                     else:
+#                         sentiment_code = '<neu>'
+#                 elif sentiment < 0.05:
+#                     if coin > 0.5:
+#                         sentiment_code = '<pos>'
+#                     else:
+#                         sentiment_code = '<neu>'
+#                 else:
+#                     if coin > 0.5:
+#                         sentiment_code = '<pos>'
+#                     else:
+#                         sentiment_code = '<neg>'                
+#             else:
+#                 if sentiment > 0.05:
+#                     sentiment_code = '<pos>'
+#                 elif sentiment < -0.05:
+#                     sentiment_code = '<neg>'
+#                 else:
+#                     sentiment_code = '<neu>'
+#         sentiment_codes.append(sentiment_code)
+            
+#     return sentiment_codes
 
 
+
+# def get_summary_source_codes(summaries, sources, txt_field):
+#     remove_tokens = ['<sos>', '<eos>', '<pad>']
+#     source_codes = []
+#     for summary, source in zip(summaries, sources):
+#         if source == 'cnn':
+#             code = 'dm'
+#         elif source == 'dm':
+#             code == 'cnn'
+#         else:
+#             coin = random.random()
+#             if coin > 0.5:
+#                 code = 'dm'
+#             else:
+#                 code = 'cnn'
+#         source_codes.append(code)
+            
+#     return sentiment_codes    
+
+# def obtain_reward_source(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None, rouge=None):
+#     rewards = []
+#     sentiments = []
+#     baseline_sentiments = []
+#     if do_rouge:
+#         temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
+#         output_rouge = [score['rouge-l']['f'] for score in temp_scores]
+#         temp_scores = rouge.get_scores(baseline_to_rouge, summary_to_rouge, avg=False)
+#         baseline_rouge = [score['rouge-l']['f'] for score in temp_scores]
+#     else:
+#         output_rouge = [0 for i in range(len(output_to_rouge))] 
+#         baseline_rouge = [0 for i in range(len(output_to_rouge))] 
+#     for sample, baseline, sentiment, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge):
+#         r_sample = sid.polarity_scores(sample)['compound']
+#         sentiments.append(r_sample)
+
+#         r_baseline = sid.polarity_scores(baseline)['compound']
+#         baseline_sentiments.append(r_baseline)
+
+#         if sentiment == '<pos>':
+#             # loss = -CE
+#             # loss_rl = (baseline - sample) * CE
+#             # loss_in_pytorch = (sample - baseline) * loss
+#             # minimize
+#             rewards.append((r_sample - r_baseline) + (s_rouge - b_rouge))
+#         elif sentiment == '<neg>':
+#             rewards.append((r_baseline - r_sample) + (s_rouge - b_rouge))
+#         elif sentiment == '<neu>':
+#             rewards.append(abs(r_sample - r_baseline) + (s_rouge - b_rouge))
+#     return torch.tensor(rewards), sentiments, baseline_sentiments
 
 
 def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=False):
@@ -339,11 +431,18 @@ def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, r
         story = prepare_story_for_control_test(story, txt_field, control='entities', ent_tensor=ent_tensor)
 
     if 'length' in controls:
-        len_codes = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
+        if reinforcement:
+            get_summary_length_codes(batch.summary, txt_field, reinforcement)    
+        else:
+            len_codes = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
+        
         story = prepare_story_for_control_test(story, txt_field, control='length', control_codes=len_codes)
 
     if 'source' in controls:
-        src_codes = ['<' + txt_nonseq_field.vocab.itos[src_ind] + '>' for src_ind in batch.source]
+        if reinforcement:
+            get_summary_source_codes(batch.summary, batch.source, txt_field, reinforcement)    
+        else:
+            src_codes = ['<' + txt_nonseq_field.vocab.itos[src_ind] + '>' for src_ind in batch.source]
         story = prepare_story_for_control_test(story, txt_field, control='source', control_codes=src_codes)
 
     if 'sentiment' in controls:
@@ -868,7 +967,8 @@ def train():
 
                     for n, score in enumerate(train_controls):                        
                         try:
-                            logger.info(f'{control_tokens[n]} performance: {sum(score) / len(score)}.')
+                            # We substract 1 because we intialized the control performance list with zeros
+                            logger.info(f'{control_tokens[n]} performance: {sum(score) / (len(score) - 1)}.')
                         except ZeroDivisionError:
                             logger.info(f'Cannot show {control_tokens[n]} performance yet.')
 
@@ -950,10 +1050,22 @@ def train():
             metrics['train_loss'].append(epoch_loss / batch_count)
             metrics['train_rouge'].append(rouge_scores)
 
-            control_performance['train']['performance'].append([[sum(score)/len(score), statistics.stdev(score)] for score in train_controls])
-            control_performance['train']['count'].append([len(score) for score in train_controls])
-            control_performance['val']['performance'].append([[sum(score)/len(score), statistics.stdev(score)] for score in val_controls])
-            control_performance['val']['count'].append([len(score) for score in val_controls])
+            train_performance, train_count, val_performance, val_count = [], [], [], []
+            for train_score, val_score in zip(train_controls, val_controls):   
+                count = len(train_score) if len(train_score) > 0 else 1
+                std = statistics.stdev(train_score) if len(train_score) > 0 else 0
+                train_performance.append([sum(train_score)/count, std])
+                train_count.append(len(train_score))
+                count = len(val_score) if len(val_score) > 0 else 1
+                std = statistics.stdev(train_score) if len(train_score) > 0 else 0
+                val_performance.append([sum(val_score)/count, std])
+                val_count.append(len(val_score))
+                
+            control_performance['train']['performance'].append(train_performance)
+            control_performance['train']['count'].append(train_count)
+            control_performance['val']['performance'].append(val_performance)
+            control_performance['val']['count'].append(val_count)
+            
             control_performance['baseline'].append([sum(baseline_controls) / len(baseline_controls), statistics.stdev(baseline_controls)])
 
             # Saving model if validation loss decreasing
@@ -1050,6 +1162,8 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.9984,
                         help='weight for rl loss (weight for ml loss is 1 - gamma)')
     parser.add_argument('--rouge_scaling', action='store_true',
+                        help='Whether to scale reward by rouge for rl experiment')
+    parser.add_argument('--sentiment', action='store_true',
                         help='Whether to scale reward by rouge for rl experiment')
     parser.add_argument('--only_pos', action='store_true',
                         help='Whether to include only positive sentiment control')
