@@ -26,9 +26,6 @@ from artificial_data_preprocess import Synthetic
 from model import ControllableSummarizer
 from generate_sample import preprocess_text
 
-from utils import prepare_batch, calculate_rouge, save_model, summarize_text, \
-                    add_tokens_to_vocab, exclude_token, get_lead_3, extract_entities_to_prepend, \
-                    count_pads, prepare_summaries, prepare_story_for_control_test
 
 from synthetic import train_synth
 
