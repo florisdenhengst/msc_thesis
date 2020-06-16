@@ -664,11 +664,18 @@ def train():
         save_suffix += '_ml'
     if args.rouge_scaling:
         save_suffix += '_rouge'
-    if not args.only_pos:
-        if args.only_neg:
-            save_suffix += '_onlyneg'
-        else:
-            save_suffix += '_all'
+    if 'sentiment' in controls:
+        save_suffix += '_sent'
+        if not args.only_pos:
+            if args.only_neg:
+                save_suffix += '_onlyneg'
+            else:
+                save_suffix += '_all'
+    if 'length' in controls:
+        save_suffix += '_len'
+    if 'source' in controls:
+        save_suffix += '_src'
+    
     
 
     batch = next(iter(train_iter))
