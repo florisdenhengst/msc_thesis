@@ -261,7 +261,7 @@ def prepare_story_for_control_test(stories, txt_field, control, control_codes=No
 
 def test_on_control(model, batch, txt_field, control, control_tokens, device):
     if control == 'length':
-        native_controls, flex_controls, control_evl_fn = test_on_length(batch, txt_field, control_tokens)
+        native_controls, flex_controls, control_evl_fn = test_on_length(batch, txt_field, control_tokens[0], control_tokens[1])
     elif control == 'sentiment':
         native_controls, flex_controls, control_evl_fn = test_on_sentiment(batch, txt_field, control_tokens[0], control_tokens[1])
 
@@ -305,8 +305,11 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
     return outputs, control_performance, results
 
 
-def test_on_length(batch, txt_field, len_tokens):
-    native_controls = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
+def test_on_length(batch, txt_field, len_tokens, len_codes=None):
+    if len_codes is None:
+        native_controls = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
+    else:
+        native_controls = len_codes
     flex_controls = []
     for token in len_tokens:
         flex_controls.append([token for i in range(len(batch.summary))])
@@ -584,7 +587,7 @@ def train():
         logger.info(f'1st train article id is {sample.id}')
         sample = next(iter(val_iter))
         logger.info(f'1st val article id is {sample.id}')
-        _ = count_pads(train_iter, txt_field.vocab.stoi[txt_field.pad_token], True)
+        # _ = count_pads(train_iter, txt_field.vocab.stoi[txt_field.pad_token], True)
         
     
     logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
@@ -848,8 +851,9 @@ def train():
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (sentiment_tokens, sentiment_codes), device)
                 elif 'length' in controls:
-                    story, summary_to_rouge, summary_to_pass, lead_3, length_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], len_tokens, device)
+                    story, summary_to_rouge, summary_to_pass, lead_3, len_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                    len_codes = len_codes if args.reinforcement else None
+                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (len_tokens, len_codes), device)
                     
 
                 start = time.time()
