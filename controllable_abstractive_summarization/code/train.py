@@ -585,6 +585,8 @@ def train():
         #Check for consistency of random seed
         sample = next(iter(train_iter))
         logger.info(f'1st train article id is {sample.id}')
+        logger.info(f'Batch length tokens: {batch.length_tokens}')
+        logger.info(f'Batch source tokens: {batch.source}')
         sample = next(iter(val_iter))
         logger.info(f'1st val article id is {sample.id}')
         # _ = count_pads(train_iter, txt_field.vocab.stoi[txt_field.pad_token], True)
@@ -678,9 +680,6 @@ def train():
     
     
 
-    batch = next(iter(train_iter))
-    logger.info(f'Batch length tokens: {batch.length_tokens}')
-    logger.info(f'Batch source tokens: {batch.source}')
             
     logger.info(f'Initializing model with:') 
     logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
