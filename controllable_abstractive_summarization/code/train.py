@@ -611,9 +611,13 @@ def train():
     logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary before adding control codes.')
     
     len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
+    len_tokens_rl = ['<long>', '<short>', '<medium>']
     txt_field = add_tokens_to_vocab(txt_field, len_tokens)
+    txt_field = add_tokens_to_vocab(txt_field, len_tokens_rl)
     source_tokens = ['<cnn>', '<dailymail>']
+    source_tokens_rl = ['<cnnrl>', '<dailymailrl>']
     txt_field = add_tokens_to_vocab(txt_field, source_tokens)
+    txt_field = add_tokens_to_vocab(txt_field, source_tokens_rl)
     sentiment_tokens = ['<pos>', '<neg>', '<neu>']
     txt_field = add_tokens_to_vocab(txt_field, sentiment_tokens)
 
@@ -631,6 +635,13 @@ def train():
         controls.append('entities')
     if '4' in tmp_controls:
         controls.append('sentiment')
+
+    if 'sentiment' in controls:
+        control_tokens = sentiment_tokens
+    elif 'length' in controls:
+        control_tokens = len_tokens_rl if args.reinforcement else len_tokens
+    elif 'source' in controls:
+        control_tokens = source_tokens_rl if args.reinforcement else source_tokens
 
     logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary after adding control codes.')
 
@@ -722,13 +733,6 @@ def train():
     sent_end_inds = [txt_field.vocab.stoi[token] for token in sent_end_tokens]
     recursion_count = 0
     stop_condition = True    
-
-    if 'sentiment' in controls:
-        control_tokens = sentiment_tokens
-    elif 'length' in controls:
-        control_tokens = ['<long>', '<short>', '<medium>'] if args.reinforcement else length_tokens
-    elif 'source' in controls:
-        control_tokens = source_tokens
     
 
     if args.timing and args.reinforcement and not args.full_train:
