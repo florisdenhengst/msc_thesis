@@ -6,6 +6,7 @@ import time
 import random
 import statistics
 
+import nltk
 import spacy
 import torch
 import logging
@@ -25,6 +26,10 @@ from artificial_data_preprocess import Synthetic
 from model import ControllableSummarizer
 from generate_sample import preprocess_text
 
+from utils import prepare_batch, calculate_rouge, save_model, summarize_text, \
+                    add_tokens_to_vocab, exclude_token, get_lead_3, extract_entities_to_prepend, \
+                    count_pads, prepare_summaries, prepare_story_for_control_test
+
 from synthetic import train_synth
 
 from nltk.sentiment.vader import SentimentIntensityAnalyzer, SentiText
@@ -37,9 +42,102 @@ DROPOUT_PROB = 0.2 # from paper
 NO_LEN_TOKENS = 10
 BATCH_SIZE = 32
 
-
+nltk.download('vader_lexicon')
 logger = logging.getLogger('Training log')
 coloredlogs.install(logger=logger, level='DEBUG', fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+
+def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=False):
+    summary_to_rouge, summary_to_pass = prepare_summaries(batch.summary, txt_field)
+    story = batch.story
+    lead_3 = get_lead_3(batch.story, txt_field, sent_end_inds)
+    codes = []
+
+    if 'entities' in controls:     
+        ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)  
+        story = prepare_story_for_control_test(story, txt_field, control='entities', ent_tensor=ent_tensor)
+        # return story, summary_to_rouge, summary_to_pass, lead_3
+
+    if 'length' in controls:
+        if reinforcement:
+            codes = get_summary_length_codes(batch.summary, batch.length_tokens, reinforcement)    
+        else:
+            codes = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
+        
+        story = prepare_story_for_control_test(story, txt_field, control='length', control_codes=codes)
+
+    if 'source' in controls:
+        if reinforcement:
+            codes = get_summary_source_codes(batch.summary, batch.source, txt_field, reinforcement)    
+        else:
+            codes = ['<' + txt_nonseq_field.vocab.itos[src_ind] + '>' for src_ind in batch.source]
+        story = prepare_story_for_control_test(story, txt_field, control='source', control_codes=codes)
+
+    if 'sentiment' in controls:
+        codes = get_summary_sentiment_codes(batch.summary, txt_field, reinforcement)
+        story = prepare_story_for_control_test(story, txt_field, control='sentiment', control_codes=codes)
+        
+
+    return story, summary_to_rouge, summary_to_pass, lead_3, codes
+
+def calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores):
+    
+    try:
+        temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=True)
+    except RecursionError:
+        recursion_count += 1
+        temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
+    if rouge_scores is None:
+        rouge_scores = temp_scores
+    else: 
+        rouge_scores = {key: Counter(rouge_scores[key]) + Counter(temp_scores[key]) for key in rouge_scores.keys()}
+        for key in rouge_scores:
+            if len(rouge_scores[key]) == 0:
+                rouge_scores[key] = {'f': 0.0, 'p': 0.0, 'r': 0.0}
+            else:
+                rouge_scores[key] = dict(rouge_scores[key]) 
+    return rouge_scores, temp_scores
+
+def save_model(model, save_model_path, epoch, save_suffix):
+    Path.mkdir(save_model_path, exist_ok=True)
+    if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + save_suffix + '.model')):
+        logger.info('Removing model from previous epoch...')
+        Path.unlink(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + save_suffix + '.model'))
+    logger.info(f'Saving model at epoch {epoch}.')
+    torch.save(model.state_dict(), Path(save_model_path, 'summarizer_epoch_' + str(epoch) + save_suffix + '.model'))
+
+
+def summarize_text(text, field, model, device, bpe_applied=True, desired_length=5, desired_source='cnn', summary=None):
+    
+    if not bpe_applied:
+        with open(Path(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
+            bpencoder = BPEncoder(codes)
+
+        def repl(match):
+            replaced = match.group(0).replace('@@ ', '')
+            return replaced
+
+        pattern = '@{3} enti@{2} ty@{2} (\d+@@ )*\d+(?!@)'
+        text = re.sub(pattern, repl, bpencoder.encode(text))
+
+    with model.eval() and torch.no_grad():
+        nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "ner"])
+        text = [tok.lower() for tok in nlp.tokenizer(text)]
+        text = ['<sos>'] + text + ['<eos>']
+        text = torch.tensor([field.vocab.stoi[token] for token in text]).unsqueeze(0).to(device)
+
+        # lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
+        
+        len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(desired_length) + '>']]).unsqueeze(dim=1)
+        src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[desired_source] + '>']]).unsqueeze(dim=1)
+        # ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
+
+        story = torch.cat((len_tensor, src_tensor, story), dim=1) #ent_tensor, len_tensor, src_tensor, story), dim=1)
+        output = model.inference(story, 'sos', 'eos')
+        logger.info(f'Summary: {[txt_field.vocab.itos[out] for out in output]}')
+        if summary is not None:
+            logger.info(f'Summary: {summary}')
+
 
 def add_tokens_to_vocab(txt_field, tokens):
     for token in tokens:
@@ -108,7 +206,7 @@ def extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field):
 
     return torch.stack(entities_to_prepend)
 
-def count_pads(train_iter, padding_idx):
+def count_pads(train_iter, padding_idx, to_count=True):
     stories_len = []
     summaries_len = []
     st_all_tokens = 0
@@ -118,12 +216,12 @@ def count_pads(train_iter, padding_idx):
     for batch in train_iter:
         stories_len.append(batch.story.shape[1])
         summaries_len.append(batch.summary.shape[1])
-        if args.count_pads:
+        if to_count:
             st_all_tokens += batch.story.shape[0] * batch.story.shape[1] 
             sm_all_tokens += batch.summary.shape[0] * batch.summary.shape[1] 
             st_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.story])
             sm_pads += sum([sum([1 for ind in st if ind==padding_idx]) for st in batch.summary])
-    if args.count_pads:
+    if to_count:
         logger.info(f'In stories, pads are {100*st_pads/st_all_tokens} of all tokens.')
         logger.info(f'In summaries, pads are {100*sm_pads/sm_all_tokens} of all tokens.')
 
@@ -161,6 +259,7 @@ def prepare_story_for_control_test(stories, txt_field, control, control_codes=No
         ctrl_tensor = ent_tensor
     story = torch.cat((ctrl_tensor, stories), dim=1)
     return story
+
 
 
 def test_on_control(model, batch, txt_field, control, control_tokens, device):
@@ -268,20 +367,11 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             if reinforcement:
                 coin = random.random()
                 if sentiment > 0.05:
-                    if coin > 0.5:
-                        sentiment_code = '<neg>'
-                    else:
-                        sentiment_code = '<neu>'
+                    sentiment_code = '<neg>' if coin > 0.5 else '<neu>'
                 elif sentiment < 0.05:
-                    if coin > 0.5:
-                        sentiment_code = '<pos>'
-                    else:
-                        sentiment_code = '<neu>'
+                    sentiment_code = '<pos>' if coin > 0.5 else '<neu>'
                 else:
-                    if coin > 0.5:
-                        sentiment_code = '<pos>'
-                    else:
-                        sentiment_code = '<neg>'                
+                    sentiment_code = '<pos>' if coin > 0.5 else '<neg>'
             else:
                 if sentiment > 0.05:
                     sentiment_code = '<pos>'
@@ -307,9 +397,11 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
         output_rouge = [0 for i in range(len(output_to_rouge))] 
         baseline_rouge = [0 for i in range(len(output_to_rouge))] 
     for sample, baseline, sentiment, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge):
+        sample = sample.replace('@@ ', '')
         r_sample = sid.polarity_scores(sample)['compound']
         sentiments.append(r_sample)
 
+        baseline = sample.replace('@@ ', '')
         r_baseline = sid.polarity_scores(baseline)['compound']
         baseline_sentiments.append(r_baseline)
 
@@ -325,73 +417,27 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
             rewards.append(abs(r_sample - r_baseline) + (s_rouge - b_rouge))
     return torch.tensor(rewards), sentiments, baseline_sentiments
 
-# def get_summary_length_codes(summaries, txt_field):
-#     remove_tokens = ['<sos>', '<eos>', '<pad>']
-#     sentiment_codes = []
-#     for summary in summaries:
-#         if args.only_pos:
-#             sentiment_code = '<pos>'
-#         if args.only_neg:
-#             sentiment_code = '<neg>'
-#         else:
-#             tmp = []
-#             for ind in summary:
-#                 if txt_field.vocab.itos[ind] not in remove_tokens:
-#                     tmp.append(txt_field.vocab.itos[ind])
-#             summary = ' '.join(tmp).replace('@@ ', '')
-
-#             sentiment = sid.polarity_scores(summary)['compound']
-#             if reinforcement:
-#                 coin = random.random()
-#                 if sentiment > 0.05:
-#                     if coin > 0.5:
-#                         sentiment_code = '<neg>'
-#                     else:
-#                         sentiment_code = '<neu>'
-#                 elif sentiment < 0.05:
-#                     if coin > 0.5:
-#                         sentiment_code = '<pos>'
-#                     else:
-#                         sentiment_code = '<neu>'
-#                 else:
-#                     if coin > 0.5:
-#                         sentiment_code = '<pos>'
-#                     else:
-#                         sentiment_code = '<neg>'                
-#             else:
-#                 if sentiment > 0.05:
-#                     sentiment_code = '<pos>'
-#                 elif sentiment < -0.05:
-#                     sentiment_code = '<neg>'
-#                 else:
-#                     sentiment_code = '<neu>'
-#         sentiment_codes.append(sentiment_code)
-            
-#     return sentiment_codes
 
 
-
-def get_summary_source_codes(summaries, sources, txt_field):
-    remove_tokens = ['<sos>', '<eos>', '<pad>']
-    source_codes = []
-    for summary, source in zip(summaries, sources):
-        if source == 'cnn':
-            code = 'dm'
-        elif source == 'dm':
-            code == 'cnn'
+def get_summary_length_codes(summaries, lengths, txt_field):
+    length_codes = []
+    for summary, length_code in zip(summaries, lengths):
+        coin = random.random()
+        if int(length_code) < 4:
+            # This is the short summary category
+            code = '<medium>' if coin > 0.5 else '<long>'
+        elif int(length_code) < 8:
+            code = '<short>' if coin > 0.5 else '<long>'
         else:
-            coin = random.random()
-            if coin > 0.5:
-                code = 'dm'
-            else:
-                code = 'cnn'
-        source_codes.append(code)
-    return sentiment_codes    
+            code = '<medium>' if coin > 0.5 else '<short>'
+        length_codes.append(code)
+    return length_codes  
 
-def obtain_reward_source(output_to_rouge, baseline_to_rouge, sentiment_codes, do_rouge=False, summary_to_rouge=None, rouge=None):
+
+def obtain_reward_length(output_to_rouge, baseline_to_rouge, length_codes, do_rouge=False, summary_to_rouge=None, rouge=None):
     rewards = []
-    source_overlaps = []
-    baseline_sentiments = []
+    lengths = []
+    baseline_lengths = []
     if do_rouge:
         temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
         output_rouge = [score['rouge-l']['f'] for score in temp_scores]
@@ -400,114 +446,89 @@ def obtain_reward_source(output_to_rouge, baseline_to_rouge, sentiment_codes, do
     else:
         output_rouge = [0 for i in range(len(output_to_rouge))] 
         baseline_rouge = [0 for i in range(len(output_to_rouge))] 
-    for sample, baseline, sentiment, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, sentiment_codes, output_rouge, baseline_rouge):
-        r_sample = sid.polarity_scores(sample)['compound']
-        sentiments.append(r_sample)
+    for sample, baseline, length_code, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, length_codes, output_rouge, baseline_rouge):
+        sample = sample.replace('@@ ', '')
+        r_sample = len(sample.split(' '))
+        lengths.append(r_sample)
 
-        r_baseline = sid.polarity_scores(baseline)['compound']
-        baseline_sentiments.append(r_baseline)
+        # r_baseline = 
+        baseline = baseline.replace('@@ ', '')
+        r_baseline = len(baseline.split(' '))
+        baseline_lengths.append(r_baseline)
 
-        if sentiment == '<pos>':
+        if length_code == '<long>':
             # loss = -CE
             # loss_rl = (baseline - sample) * CE
             # loss_in_pytorch = (sample - baseline) * loss
             # minimize
             rewards.append((r_sample - r_baseline) + (s_rouge - b_rouge))
-        elif sentiment == '<neg>':
+        elif length_code == '<short>':
             rewards.append((r_baseline - r_sample) + (s_rouge - b_rouge))
-        elif sentiment == '<neu>':
+        elif length_code == '<medium>':
             rewards.append(abs(r_sample - r_baseline) + (s_rouge - b_rouge))
-    return torch.tensor(rewards), sentiments, baseline_sentiments
+    return torch.tensor(rewards), lengths, baseline_lengths
 
 
-def prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=False):
-    summary_to_rouge, summary_to_pass = prepare_summaries(batch.summary, txt_field)
-    story = batch.story
-    lead_3 = get_lead_3(batch.story, txt_field, sent_end_inds)
 
-    if 'entities' in controls:     
-        ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)  
-        story = prepare_story_for_control_test(story, txt_field, control='entities', ent_tensor=ent_tensor)
-
-    if 'length' in controls:
-        if reinforcement:
-            get_summary_length_codes(batch.summary, txt_field, reinforcement)    
+def get_summary_length_codes(summaries, lengths, txt_field):
+    length_codes = []
+    for summary, length_code in zip(summaries, lengths):
+        coin = random.random()
+        if int(length_code) < 4:
+            # This is the short summary category
+            code = '<medium>' if coin > 0.5 else '<long>'
+        elif int(length_code) < 8:
+            code = '<short>' if coin > 0.5 else '<long>'
         else:
-            len_codes = ['<len' + str(int(len_ind)) + '>' for len_ind in batch.length_tokens]
-        
-        story = prepare_story_for_control_test(story, txt_field, control='length', control_codes=len_codes)
+            code = '<medium>' if coin > 0.5 else '<short>'
+        length_codes.append(code)
+    return length_codes  
 
-    if 'source' in controls:
-        if reinforcement:
-            get_summary_source_codes(batch.summary, batch.source, txt_field, reinforcement)    
-        else:
-            src_codes = ['<' + txt_nonseq_field.vocab.itos[src_ind] + '>' for src_ind in batch.source]
-        story = prepare_story_for_control_test(story, txt_field, control='source', control_codes=src_codes)
+# def get_summary_source_codes(summaries, sources, txt_field):
+#     source_codes = []
+#     for summary, source in zip(summaries, sources):
+#         if source == '<cnn>':
+#             code = '<dailymail>'
+#         elif source == '<dailymail>':
+#             code == '<cnn>'
+#         else:
+#             coin = random.random()
+#             code = 'dm' if coin > 0.5 else 'cnn'
+#         source_codes.append(code)
+#     return source_codes    
 
-    if 'sentiment' in controls:
-        sentiment_codes = get_summary_sentiment_codes(batch.summary, txt_field, reinforcement)
-        story = prepare_story_for_control_test(story, txt_field, control='sentiment', control_codes=sentiment_codes)
-        return story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes
+# def obtain_reward_source(output_to_rouge, baseline_to_rouge, source_codes, do_rouge=False, summary_to_rouge=None, rouge=None):
+#     rewards = []
+#     overlaps = []
+#     baseline_overlaps = []
+#     if do_rouge:
+#         temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
+#         output_rouge = [score['rouge-l']['f'] for score in temp_scores]
+#         temp_scores = rouge.get_scores(baseline_to_rouge, summary_to_rouge, avg=False)
+#         baseline_rouge = [score['rouge-l']['f'] for score in temp_scores]
+#     else:
+#         output_rouge = [0 for i in range(len(output_to_rouge))] 
+#         baseline_rouge = [0 for i in range(len(output_to_rouge))] 
+#     for sample, baseline, source_code, s_rouge, b_rouge in zip(output_to_rouge, baseline_to_rouge, source_codes, output_rouge, baseline_rouge):
+#         # r_sample = 
+#         overlaps.append(r_sample)
 
-    return story, summary_to_rouge, summary_to_pass, lead_3
+#         # r_baseline = 
+#         baseline_overlaps.append(r_baseline)
 
-def calculate_rouge(summary_to_rouge, output_to_rouge, rouge, rouge_scores):
-    
-    try:
-        temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=True)
-    except RecursionError:
-        recursion_count += 1
-        temp_scores = rouge.get_scores(['a'], ['b'], avg=True)
-    if rouge_scores is None:
-        rouge_scores = temp_scores
-    else: 
-        rouge_scores = {key: Counter(rouge_scores[key]) + Counter(temp_scores[key]) for key in rouge_scores.keys()}
-        for key in rouge_scores:
-            if len(rouge_scores[key]) == 0:
-                rouge_scores[key] = {'f': 0.0, 'p': 0.0, 'r': 0.0}
-            else:
-                rouge_scores[key] = dict(rouge_scores[key]) 
-    return rouge_scores, temp_scores
-
-def save_model(model, save_model_path, epoch, save_suffix):
-    Path.mkdir(save_model_path, exist_ok=True)
-    if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + save_suffix + '.model')):
-        logger.info('Removing model from previous epoch...')
-        Path.unlink(Path(save_model_path, 'summarizer_epoch_' + str(epoch-1) + save_suffix + '.model'))
-    logger.info(f'Saving model at epoch {epoch}.')
-    torch.save(model.state_dict(), Path(save_model_path, 'summarizer_epoch_' + str(epoch) + save_suffix + '.model'))
+#         if source_code == '<pos>':
+#             # loss = -CE
+#             # loss_rl = (baseline - sample) * CE
+#             # loss_in_pytorch = (sample - baseline) * loss
+#             # minimize
+#             rewards.append((r_sample - r_baseline) + (s_rouge - b_rouge))
+#         elif source_code == '<neg>':
+#             rewards.append((r_baseline - r_sample) + (s_rouge - b_rouge))
+#         elif source_code == '<neu>':
+#             rewards.append(abs(r_sample - r_baseline) + (s_rouge - b_rouge))
+#     return torch.tensor(rewards), overlaps, baseline_overlaps
 
 
-def summarize_text(text, field, model, device, bpe_applied=True, desired_length=5, desired_source='cnn', summary=None):
-    
-    if not bpe_applied:
-        with open(Path(data_path, 'cnn_dailymail.bpe'), 'r') as codes:
-            bpencoder = BPEncoder(codes)
-
-        def repl(match):
-            replaced = match.group(0).replace('@@ ', '')
-            return replaced
-
-        pattern = '@{3} enti@{2} ty@{2} (\d+@@ )*\d+(?!@)'
-        text = re.sub(pattern, repl, bpencoder.encode(text))
-
-    with model.eval() and torch.no_grad():
-        nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "ner"])
-        text = [tok.lower() for tok in nlp.tokenizer(text)]
-        text = ['<sos>'] + text + ['<eos>']
-        text = torch.tensor([field.vocab.stoi[token] for token in text]).unsqueeze(0).to(device)
-
-        # lead_3 = get_lead_3(story, txt_field, sent_end_inds) 
-        
-        len_tensor = torch.tensor([txt_field.vocab.stoi['<len' + str(desired_length) + '>']]).unsqueeze(dim=1)
-        src_tensor = torch.tensor([txt_field.vocab.stoi['<' + txt_nonseq_field.vocab.itos[desired_source] + '>']]).unsqueeze(dim=1)
-        # ent_tensor = extract_entities_to_prepend(lead_3, summary_to_rouge, txt_field)
-
-        story = torch.cat((len_tensor, src_tensor, story), dim=1) #ent_tensor, len_tensor, src_tensor, story), dim=1)
-        output = model.inference(story, 'sos', 'eos')
-        logger.info(f'Summary: {[txt_field.vocab.itos[out] for out in output]}')
-        if summary is not None:
-            logger.info(f'Summary: {summary}')
 
 def train():
     random.seed(args.seed)
@@ -540,18 +561,15 @@ def train():
     if not Path.exists(csv_path):
         logger.info(f'creating pre-processed data...')
         anonymize_and_bpe_data(data_path=data_path, sources=['cnn'], cut_off_length=400)
-
-    if args.test:
-        _, _, test_data = TabularDataset(path=csv_path, format='csv', 
+    train_data, val_data, test_data = TabularDataset(path=csv_path, format='csv', 
                                 skip_header=True, fields=train_fields).split(split_ratio=[0.922, 0.043, 0.035], random_state=st)
+    if args.test:
         train_data, val_data = [], []
         test_iter = BucketIterator(dataset=test_data, batch_size=args.batch_size, 
             sort_key=lambda x:(len(x.story), len(x.summary)), shuffle=True, train=False)
         txt_field.build_vocab(test_data)
         txt_nonseq_field.build_vocab(test_data)
-    else:
-        train_data, val_data, _ = TabularDataset(path=csv_path, format='csv', 
-                                skip_header=True, fields=train_fields).split(split_ratio=[0.922, 0.043, 0.035], random_state=st)
+    else:        
         test_data = []
         train_iter = BucketIterator(dataset=train_data, batch_size=args.batch_size, 
             sort_key=lambda x:(len(x.story), len(x.summary)), shuffle=True, train=True)
@@ -569,7 +587,7 @@ def train():
         logger.info(f'1st train article id is {sample.id}')
         sample = next(iter(val_iter))
         logger.info(f'1st val article id is {sample.id}')
-        #_ = count_pads(train_iter, padding_idx)
+        _ = count_pads(train_iter, txt_field.vocab.stoi[txt_field.pad_token], True)
         
     
     logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
@@ -577,8 +595,7 @@ def train():
     end = time.time()
     logger.info(f'finished in {end-start} seconds.')
     logger.info('Started building vocabs...')
-    start = time.time()
-    
+    start = time.time()    
     
     if Path.exists(Path(save_model_path, 'vocab_stoi.pkl')):
         with open(Path(save_model_path, 'vocab_stoi.pkl'), 'rb') as file:
@@ -643,6 +660,9 @@ def train():
             save_suffix += '_all'
     
 
+    batch = next(iter(train_iter))
+    logger.info(f'Batch length tokens: {batch.length_tokens}')
+    logger.info(f'Batch source tokens: {batch.source}')
             
     logger.info(f'Initializing model with:') 
     logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
@@ -662,9 +682,6 @@ def train():
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
         logger.info(f'Shape of word embeddings: {model.tok_embedding.weight.shape}')
         logger.info(f'Shape of positional embeddings: {model.pos_embedding.weight.shape}')
-        batch = next(iter(train_iter))
-        logger.info(f'Batch length tokens: {batch.length_tokens}')
-        logger.info(f'Batch source tokens: {batch.source}')
             
             
         epoch = args.epoch
@@ -709,7 +726,9 @@ def train():
     if 'sentiment' in controls:
         control_tokens = sentiment_tokens
     elif 'length' in controls:
-        control_tokens = length_tokens
+        control_tokens = ['<long>', '<short>', '<medium>'] if args.reinforcement else length_tokens
+    elif 'source' in controls:
+        control_tokens = source_tokens
     
 
     if args.timing and args.reinforcement and not args.full_train:
@@ -819,10 +838,9 @@ def train():
                 
                 if 'sentiment' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, batch_control_performance, results  =test_on_control(model, batch, txt_field, controls[0], (sentiment_tokens, sentiment_codes), device)
-                    
+                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (sentiment_tokens, sentiment_codes), device)
                 elif 'length' in controls:
-                    story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                    story, summary_to_rouge, summary_to_pass, lead_3, length_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], len_tokens, device)
                     
 
@@ -896,12 +914,15 @@ def train():
                 batch_count += 1
 
                 # Prepare inputs for forward pass
-                if 'sentiment' in controls:
-                    story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                else:
-                    story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                
 
+                story, summary_to_rouge, summary_to_pass, lead_3, codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                
+                if 'sentiment' in controls:
+                    reward_fn = obtain_reward_sentiment
+                elif 'length' in controls:
+                    reward_fn = obtain_reward_length
+                elif 'source' in controls:
+                    reward_fn = obtain_reward_source
                 if args.reinforcement:
                     if args.ml_reinforcement:
                         output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), sos_idx, eos_idx)
@@ -921,18 +942,18 @@ def train():
                     sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
 
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                    rewards, sentiments, baseline_sentiments = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, 
+                    rewards, control_perf, baseline_perf = reward_fn(output_to_rouge, baseline_to_rouge, codes, 
                                                                                         do_rouge=args.rouge_scaling, summary_to_rouge=summary_to_rouge, rouge=rouge)
 
-                    for ind, group in enumerate(sentiment_codes):
-                        if group == '<pos>':
-                            train_controls[0].append(sentiments[ind])
-                        elif group == '<neg>':
-                            train_controls[1].append(sentiments[ind])
-                        elif group == '<neu>':
-                            train_controls[2].append(sentiments[ind])
+                    for ind, group in enumerate(codes):
+                        if group == '<pos>' or group == '<long>' or group == '<cnn>':
+                            train_controls[0].append(control_perf[ind])
+                        elif group == '<neg>' or group == '<short>' or group == '<dailymail>':
+                            train_controls[1].append(control_perf[ind])
+                        elif group == '<neu>' or group == '<medium>':
+                            train_controls[2].append(control_perf[ind])
                     
-                    baseline_controls.extend(baseline_sentiments)
+                    baseline_controls.extend(baseline_perf)
 
                     rewards = rewards.to(device)
                     loss = torch.mul(rewards.unsqueeze(1), loss)
@@ -984,10 +1005,7 @@ def train():
                 for batch in val_iter:
                     val_batch_count += 1
 
-                    if 'sentiment' in controls:
-                        story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    else:
-                        story, summary_to_rouge, summary_to_pass, lead_3 = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
+                    story, summary_to_rouge, summary_to_pass, lead_3, codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     
                     
                     if args.reinforcement:
@@ -1008,16 +1026,17 @@ def train():
                         sample_output = sample_output.contiguous().view(-1, sample_output.shape[-1])
                         sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
                         loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                        rewards, sentiments, _ = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes, 
+                        rewards, control_perf, _ = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, codes, 
                                                                     do_rouge=args.rouge_scaling, summary_to_rouge=summary_to_rouge, rouge=rouge)
 
-                        for no, group in enumerate(sentiment_codes):
-                            if group == '<pos>':
-                                val_controls[0].append(sentiments[no])
-                            elif group == '<neg>':
-                                val_controls[1].append(sentiments[no])
-                            elif group == '<neu>':
-                                val_controls[2].append(sentiments[no])
+                        for ind, group in enumerate(codes):
+                            if group == '<pos>' or group == '<long>' or group == '<cnn>':
+                                val_controls[0].append(control_perf[ind])
+                            elif group == '<neg>' or group == '<short>' or group == '<dailymail>':
+                                val_controls[1].append(control_perf[ind])
+                            elif group == '<neu>' or group == '<medium>':
+                                val_controls[2].append(control_perf[ind])
+
 
                         rewards = rewards.to(device)
                         loss = torch.mul(rewards.unsqueeze(1), loss)
@@ -1182,6 +1201,7 @@ if __name__ == '__main__':
                         help='Demo')
 
     args = parser.parse_args()
+    logger.info(args)
 
     if args.debug:
         os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
