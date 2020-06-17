@@ -920,6 +920,13 @@ def train():
             start = time.time()
             logger.info(f'Training, epoch {epoch}.')
 
+            if 'sentiment' in controls:
+                reward_fn = obtain_reward_sentiment
+            elif 'length' in controls:
+                reward_fn = obtain_reward_length
+            elif 'source' in controls:
+                reward_fn = obtain_reward_source
+
             # Train epoch
             for batch in train_iter:
                 if batch.story.shape[1] > max_len:
@@ -933,12 +940,6 @@ def train():
 
                 story, summary_to_rouge, summary_to_pass, lead_3, codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                 
-                if 'sentiment' in controls:
-                    reward_fn = obtain_reward_sentiment
-                elif 'length' in controls:
-                    reward_fn = obtain_reward_length
-                elif 'source' in controls:
-                    reward_fn = obtain_reward_source
                 if args.reinforcement:
                     if args.ml_reinforcement:
                         output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), sos_idx, eos_idx)
@@ -1018,6 +1019,7 @@ def train():
 
             # Validation epoch
             with model.eval() and torch.no_grad():
+
                 for batch in val_iter:
                     val_batch_count += 1
 
@@ -1042,7 +1044,7 @@ def train():
                         sample_output = sample_output.contiguous().view(-1, sample_output.shape[-1])
                         sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
                         loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
-                        rewards, control_perf, _ = obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, codes, 
+                        rewards, control_perf, _ = reward_fn(output_to_rouge, baseline_to_rouge, codes, 
                                                                     do_rouge=args.rouge_scaling, summary_to_rouge=summary_to_rouge, rouge=rouge)
 
                         for ind, group in enumerate(codes):
@@ -1055,8 +1057,6 @@ def train():
 
 
                         rewards = rewards.type(torch.FloatTensor).to(device)
-                        print(rewards.shape)
-                        print(loss.shape)
                         loss = torch.mul(rewards.unsqueeze(1), loss)
                         loss = loss.mean()
                         if args.ml_reinforcement:
