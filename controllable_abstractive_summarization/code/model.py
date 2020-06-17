@@ -28,6 +28,10 @@ class ControllableSummarizer(nn.Module):
         self.padding_idx = padding_idx
         self.max_length = max_length
         self.max_sample_length = int(max_length / 5)
+        self.share_weights = share_weights
+
+        self.input_dim = input_dim
+        self.emb_dim = emb_dim
 
         # original paper shares word embeddings between encoder and decoder
         if share_weights:
@@ -45,10 +49,10 @@ class ControllableSummarizer(nn.Module):
             self.pos_embedding = None
             self.hid2emb = None
         
-        self.encoder = ConvEncoder(input_dim, emb_dim, hid_dim, n_layers, 
+        self.encoder = ConvEncoder(self.input_dim, self.emb_dim, hid_dim, n_layers, 
                                     kernel_size, dropout_prob, device, padding_idx, 
                                     max_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
-        self.decoder = ConvDecoder(output_dim, emb_dim, hid_dim, n_layers, 
+        self.decoder = ConvDecoder(output_dim, self.emb_dim, hid_dim, n_layers, 
                                     kernel_size, dropout_prob, device, padding_idx, 
                                     self_attention, self.max_length, self.max_sample_length, self.tok_embedding, self.pos_embedding, self.hid2emb)
 
@@ -56,6 +60,28 @@ class ControllableSummarizer(nn.Module):
         conved, combined = self.encoder(src_tokens)
         output, attention = self.decoder(trg_tokens, conved, combined)
         return output, attention
+    
+    def resize_token_embeddings(self, new_input_dim):
+
+        # Initialize new embeddings
+        new_embeddings = nn.Embedding(new_inpud_dim, self.emb_dim)
+        new_embeddings.to(self.device)
+        nn.init.normal_(new_embeddings.weight, 0, 0.1)
+
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(self.input_dim, new_num_tokens)
+        new_embeddings.weight.data[:num_tokens_to_copy, :] = self.tok_embedding.data[:num_tokens_to_copy, :]
+
+        self.tok_embedding = new_embeddings
+        del new_embeddings
+        if self.share_weights:
+            self.encoder.tok_embedding = self.tok_embedding
+            self.decoder.tok_embedding = self.tok_embedding
+        self.input_dim = new_input_dim
+
+
+
+
 
 
     def rl_inference(self, src_tokens, sos_idx, eos_idx):

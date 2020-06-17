@@ -613,13 +613,13 @@ def train():
     logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary before adding control codes.')
     
     len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
-    # len_tokens_rl = ['<long>', '<short>', '<medium>']
+    len_tokens_rl = ['<long>', '<short>', '<medium>']
     txt_field = add_tokens_to_vocab(txt_field, len_tokens)
-    # txt_field = add_tokens_to_vocab(txt_field, len_tokens_rl)
+    
     source_tokens = ['<cnn>', '<dailymail>']
-    # source_tokens_rl = ['<cnnrl>', '<dailymailrl>']
+    source_tokens_rl = ['<cnnrl>', '<dailymailrl>']
     txt_field = add_tokens_to_vocab(txt_field, source_tokens)
-    # txt_field = add_tokens_to_vocab(txt_field, source_tokens_rl)
+    
     sentiment_tokens = ['<pos>', '<neg>', '<neu>']
     txt_field = add_tokens_to_vocab(txt_field, sentiment_tokens)
 
@@ -699,7 +699,12 @@ def train():
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
         logger.info(f'Shape of word embeddings: {model.tok_embedding.weight.shape}')
         logger.info(f'Shape of positional embeddings: {model.pos_embedding.weight.shape}')
-            
+        txt_field = add_tokens_to_vocab(txt_field, source_tokens_rl)
+        txt_field = add_tokens_to_vocab(txt_field, len_tokens_rl)
+        
+        new_input_dim = len(txt_field.vocab.itos)
+        if new_input_dim != input_dim:
+            model.resize_token_embeddings(new_input_dim)
             
         epoch = args.epoch
         metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
