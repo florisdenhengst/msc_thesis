@@ -971,7 +971,7 @@ def train():
                     
                     baseline_controls.extend(baseline_perf)
 
-                    rewards = rewards.to(device)
+                    rewards = rewards.type(torch.FloatTensor).to(device)
                     loss = torch.mul(rewards.unsqueeze(1), loss)
                     loss = loss.mean()
                     if args.ml_reinforcement:
@@ -1054,7 +1054,7 @@ def train():
                                 val_controls[2].append(control_perf[ind])
 
 
-                        rewards = rewards.to(device)
+                        rewards = rewards.to(device).type(torch.FloatTensor)
                         loss = torch.mul(rewards.unsqueeze(1), loss)
                         loss = loss.mean()
                         if args.ml_reinforcement:

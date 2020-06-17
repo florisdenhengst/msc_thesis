@@ -64,13 +64,13 @@ class ControllableSummarizer(nn.Module):
     def resize_token_embeddings(self, new_input_dim):
 
         # Initialize new embeddings
-        new_embeddings = nn.Embedding(new_inpud_dim, self.emb_dim)
+        new_embeddings = nn.Embedding(new_input_dim, self.emb_dim)
         new_embeddings.to(self.device)
         nn.init.normal_(new_embeddings.weight, 0, 0.1)
 
         # Copy token embeddings from the previous weights
-        num_tokens_to_copy = min(self.input_dim, new_num_tokens)
-        new_embeddings.weight.data[:num_tokens_to_copy, :] = self.tok_embedding.data[:num_tokens_to_copy, :]
+        num_tokens_to_copy = min(self.input_dim, new_input_dim)
+        new_embeddings.weight.data[:num_tokens_to_copy, :] = self.tok_embedding.weight.data[:num_tokens_to_copy, :]
 
         self.tok_embedding = new_embeddings
         del new_embeddings
@@ -78,9 +78,6 @@ class ControllableSummarizer(nn.Module):
             self.encoder.tok_embedding = self.tok_embedding
             self.decoder.tok_embedding = self.tok_embedding
         self.input_dim = new_input_dim
-
-
-
 
 
 
