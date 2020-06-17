@@ -585,8 +585,8 @@ def train():
         #Check for consistency of random seed
         sample = next(iter(train_iter))
         logger.info(f'1st train article id is {sample.id}')
-        logger.info(f'Batch length tokens: {batch.length_tokens}')
-        logger.info(f'Batch source tokens: {batch.source}')
+        logger.info(f'Batch length tokens: {sample.length_tokens}')
+        logger.info(f'Batch source tokens: {sample.source}')
         sample = next(iter(val_iter))
         logger.info(f'1st val article id is {sample.id}')
         # _ = count_pads(train_iter, txt_field.vocab.stoi[txt_field.pad_token], True)
@@ -613,13 +613,13 @@ def train():
     logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary before adding control codes.')
     
     len_tokens = ['<len' + str(i+1) + '>' for i in range(args.no_len_tokens)]
-    len_tokens_rl = ['<long>', '<short>', '<medium>']
+    # len_tokens_rl = ['<long>', '<short>', '<medium>']
     txt_field = add_tokens_to_vocab(txt_field, len_tokens)
-    txt_field = add_tokens_to_vocab(txt_field, len_tokens_rl)
+    # txt_field = add_tokens_to_vocab(txt_field, len_tokens_rl)
     source_tokens = ['<cnn>', '<dailymail>']
-    source_tokens_rl = ['<cnnrl>', '<dailymailrl>']
+    # source_tokens_rl = ['<cnnrl>', '<dailymailrl>']
     txt_field = add_tokens_to_vocab(txt_field, source_tokens)
-    txt_field = add_tokens_to_vocab(txt_field, source_tokens_rl)
+    # txt_field = add_tokens_to_vocab(txt_field, source_tokens_rl)
     sentiment_tokens = ['<pos>', '<neg>', '<neu>']
     txt_field = add_tokens_to_vocab(txt_field, sentiment_tokens)
 
