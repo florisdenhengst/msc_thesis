@@ -475,21 +475,6 @@ def obtain_reward_length(output_to_rouge, baseline_to_rouge, length_codes, do_ro
 
 
 
-def get_summary_length_codes(summaries, lengths, txt_field):
-    length_codes = []
-    for summary, length_code in zip(summaries, lengths):
-        if args.onlyshort:
-        coin = random.random()
-        if int(length_code) < 4:
-            # This is the short summary category
-            code = '<medium>' if coin > 0.5 else '<long>'
-        elif int(length_code) < 8:
-            code = '<short>' if coin > 0.5 else '<long>'
-        else:
-            code = '<medium>' if coin > 0.5 else '<short>'
-        length_codes.append(code)
-    return length_codes  
-
 # def get_summary_source_codes(summaries, sources, txt_field):
 #     source_codes = []
 #     for summary, source in zip(summaries, sources):
