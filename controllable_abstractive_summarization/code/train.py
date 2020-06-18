@@ -436,7 +436,7 @@ def get_summary_length_codes(summaries, lengths, txt_field):
                 code = '<short>' if coin > 0.5 else '<long>'
             else:
                 code = '<medium>' if coin > 0.5 else '<short>'
-            length_codes.append(code)
+        length_codes.append(code)
     return length_codes  
 
 
@@ -964,13 +964,9 @@ def train():
                     baseline_controls.extend(baseline_perf)
 
                     rewards = rewards.type(torch.FloatTensor).to(device)
-                    logger.info(rewards)
-                    logger.info(loss)
                     loss = torch.mul(rewards.unsqueeze(1), loss)
                     loss = loss.mean()
-                    logger.info(loss)
 
-                    assert 1 == 2
 
                     if args.ml_reinforcement:
                         summary = batch.summary[:,1:].contiguous().view(-1)
