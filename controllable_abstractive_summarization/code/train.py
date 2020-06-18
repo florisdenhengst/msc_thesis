@@ -354,7 +354,7 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
     for summary in summaries:
         if args.only_pos:
             sentiment_code = '<pos>'
-        if args.only_neg:
+        elif args.only_neg:
             sentiment_code = '<neg>'
         else:
             tmp = []
@@ -422,15 +422,20 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
 def get_summary_length_codes(summaries, lengths, txt_field):
     length_codes = []
     for summary, length_code in zip(summaries, lengths):
-        coin = random.random()
-        if int(length_code) < 4:
-            # This is the short summary category
-            code = '<medium>' if coin > 0.5 else '<long>'
-        elif int(length_code) < 8:
-            code = '<short>' if coin > 0.5 else '<long>'
+        if args.only_short:
+            code = '<short>'
+        elif args.only_long: 
+            code = '<long>'
         else:
-            code = '<medium>' if coin > 0.5 else '<short>'
-        length_codes.append(code)
+            coin = random.random()
+            if int(length_code) < 4:
+                # This is the short summary category
+                code = '<medium>' if coin > 0.5 else '<long>'
+            elif int(length_code) < 8:
+                code = '<short>' if coin > 0.5 else '<long>'
+            else:
+                code = '<medium>' if coin > 0.5 else '<short>'
+            length_codes.append(code)
     return length_codes  
 
 
@@ -473,6 +478,7 @@ def obtain_reward_length(output_to_rouge, baseline_to_rouge, length_codes, do_ro
 def get_summary_length_codes(summaries, lengths, txt_field):
     length_codes = []
     for summary, length_code in zip(summaries, lengths):
+        if args.onlyshort:
         coin = random.random()
         if int(length_code) < 4:
             # This is the short summary category
@@ -1210,6 +1216,10 @@ if __name__ == '__main__':
                         help='Whether to include only positive sentiment control')
     parser.add_argument('--only_neg', action='store_true',
                         help='Whether to include only negative sentiment control')
+    parser.add_argument('--only_short', action='store_true',
+                        help='Whether to include only short length control')
+    parser.add_argument('--only_long', action='store_true',
+                        help='Whether to include only long length control')
 
     parser.add_argument('--synth', action='store_true',
                         help='Whether to use on synthetic data')
