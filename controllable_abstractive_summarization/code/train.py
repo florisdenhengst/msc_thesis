@@ -388,6 +388,7 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
     rewards = []
     sentiments = []
     baseline_sentiments = []
+
     if do_rouge:
         temp_scores = rouge.get_scores(output_to_rouge, summary_to_rouge, avg=False)
         output_rouge = [score['rouge-l']['f'] for score in temp_scores]
@@ -401,7 +402,7 @@ def obtain_reward_sentiment(output_to_rouge, baseline_to_rouge, sentiment_codes,
         r_sample = sid.polarity_scores(sample)['compound']
         sentiments.append(r_sample)
 
-        baseline = sample.replace('@@ ', '')
+        baseline = baseline.replace('@@ ', '')
         r_baseline = sid.polarity_scores(baseline)['compound']
         baseline_sentiments.append(r_baseline)
 
@@ -566,22 +567,6 @@ def train():
             sort_key=lambda x:(len(x.story), len(x.summary)), shuffle=True, train=True)
         val_iter = BucketIterator(dataset=val_data, batch_size=args.batch_size, 
             sort_key=lambda x:(len(x.story), len(x.summary)), shuffle=True, train=False)
-        if args.epoch != 0:
-            txt_field.build_vocab()
-            txt_nonseq_field.build_vocab()
-        else:
-            txt_field.build_vocab(train_data, val_data)
-            txt_nonseq_field.build_vocab(train_data, val_data)
-
-        #Check for consistency of random seed
-        sample = next(iter(train_iter))
-        logger.info(f'1st train article id is {sample.id}')
-        logger.info(f'Batch length tokens: {sample.length_tokens}')
-        logger.info(f'Batch source tokens: {sample.source}')
-        sample = next(iter(val_iter))
-        logger.info(f'1st val article id is {sample.id}')
-        # _ = count_pads(train_iter, txt_field.vocab.stoi[txt_field.pad_token], True)
-        
     
     logger.info(f'{len(train_data)} train samples, {len(val_data)} validation samples, {len(test_data)} test samples...', )
 
@@ -591,15 +576,30 @@ def train():
     start = time.time()    
     
     if Path.exists(Path(save_model_path, 'vocab_stoi.pkl')):
-        with open(Path(save_model_path, 'vocab_stoi.pkl'), 'rb') as file:
-            txt_field.vocab.stoi = pickle.load(file)
-        with open(Path(save_model_path, 'vocab_itos.pkl'), 'rb') as file:
-            txt_field.vocab.itos = pickle.load(file)
+        if args.epoch != 0:
+            txt_field.build_vocab()
+            txt_nonseq_field.build_vocab()
+            with open(Path(save_model_path, 'vocab_stoi.pkl'), 'rb') as file:
+                txt_field.vocab.stoi = pickle.load(file)
+            with open(Path(save_model_path, 'vocab_itos.pkl'), 'rb') as file:
+                txt_field.vocab.itos = pickle.load(file)
+        else:
+            txt_field.build_vocab(train_data, val_data)
+            txt_nonseq_field.build_vocab(train_data, val_data)
     else:
+        # if args.epoch == 0:
+        txt_field.build_vocab(train_data, val_data)
+        txt_nonseq_field.build_vocab(train_data, val_data)
         with open(Path(save_model_path, 'vocab_stoi.pkl'), 'wb') as file:
             pickle.dump(txt_field.vocab.stoi, file)
         with open(Path(save_model_path, 'vocab_itos.pkl'), 'wb') as file:
             pickle.dump(txt_field.vocab.itos, file)    
+    #Check for consistency of random seed
+    sample = next(iter(test_iter)) if args.test else next(iter(train_iter))
+    print_type = 'test' if args.test else 'train'
+    logger.info(f'1st {print_type} article id is {sample.id}')
+    logger.info(f'Batch length tokens: {sample.length_tokens}')
+    logger.info(f'Batch source tokens: {sample.source}')
 
     logger.info(f'{len(txt_field.vocab.stoi)} items in vocabulary before adding control codes.')
     
@@ -951,7 +951,7 @@ def train():
 
                     loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
                     rewards, control_perf, baseline_perf = reward_fn(output_to_rouge, baseline_to_rouge, codes, 
-                                                                                        do_rouge=args.rouge_scaling, summary_to_rouge=summary_to_rouge, rouge=rouge)
+                                                                     do_rouge=args.rouge_scaling, summary_to_rouge=summary_to_rouge, rouge=rouge)
 
                     for ind, group in enumerate(codes):
                         if group == '<pos>' or group == '<long>' or group == '<cnn>':
@@ -964,8 +964,14 @@ def train():
                     baseline_controls.extend(baseline_perf)
 
                     rewards = rewards.type(torch.FloatTensor).to(device)
+                    logger.info(rewards)
+                    logger.info(loss)
                     loss = torch.mul(rewards.unsqueeze(1), loss)
                     loss = loss.mean()
+                    logger.info(loss)
+
+                    assert 1 == 2
+
                     if args.ml_reinforcement:
                         summary = batch.summary[:,1:].contiguous().view(-1)
                         output = output.contiguous().view(-1, output.shape[-1])
@@ -1036,7 +1042,7 @@ def train():
                         sample_to_loss = output_tokens[:,1:].contiguous().view(-1)
                         loss = crossentropy(sample_output, sample_to_loss).contiguous().view(output_tokens.shape[0], -1)
                         rewards, control_perf, _ = reward_fn(output_to_rouge, baseline_to_rouge, codes, 
-                                                                    do_rouge=args.rouge_scaling, summary_to_rouge=summary_to_rouge, rouge=rouge)
+                                                            do_rouge=args.rouge_scaling, summary_to_rouge=summary_to_rouge, rouge=rouge)
 
                         for ind, group in enumerate(codes):
                             if group == '<pos>' or group == '<long>' or group == '<cnn>':
