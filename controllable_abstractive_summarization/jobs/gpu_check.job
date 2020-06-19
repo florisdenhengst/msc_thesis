@@ -1,9 +1,10 @@
 #!/bin/sh
-#SBATCH --time=02:00:00
-#SBATCH -N 1
+#SBATCH --time=00:10:00
+#SBATCH -N 3
 #SBATCH --ntasks-per-node=1
-#SBATCH -C TitanX
+#SBATCH -C TitanBlack
 #SBATCH --gres=gpu:1
+
 
 source activate venv_train
 module load opencl-nvidia/9.0
@@ -11,5 +12,5 @@ module load opencl-nvidia/9.0
 nvidia-smi
 printenv
 /bin/hostname
-srun python3 ../code/check_gpu.py
+python3 -m torch.distributed.launch code/ddp_check.py
 
