@@ -6,11 +6,17 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-def example(rank, world_size):
+def example():#rank, world_size):
+    if args.distributed:
+        torch.cuda.set_device(0)
+        dist.init_process_group(backend='gloo',
+                                             init_method='env://')
+        print(torch.distributed.get_world_size())
+
     # create default process group
-    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    # dist.init_process_group("gloo", rank=rank, world_size=world_size)
     # create local model
-    model = nn.Linear(10, 10).to(rank)
+    model = nn.Linear(1000, 10).to(rank)
     # construct DDP model
     ddp_model = DDP(model, device_ids=[rank])
     # define loss function and optimizer
@@ -18,7 +24,7 @@ def example(rank, world_size):
     optimizer = optim.SGD(ddp_model.parameters(), lr=0.001)
     for j in range(100):
         # forward pass
-        outputs = ddp_model(torch.randn(20, 10).to(rank))
+        outputs = ddp_model(torch.randn(20, 1000).to(rank))
         labels = torch.randn(20, 10).to(rank)
         # backward pass
         loss_fn(outputs, labels).backward()
@@ -27,11 +33,12 @@ def example(rank, world_size):
         optimizer.zero_grad()
 
 def main():
-    world_size = 3
-    mp.spawn(example,
-        args=(world_size,),
-        nprocs=world_size,
-        join=True)
+    example()
+    # world_size = 3
+    # mp.spawn(example,
+    #     args=(world_size,),
+    #     nprocs=world_size,
+    #     join=True)
 
 if __name__=="__main__":
     duration = []
