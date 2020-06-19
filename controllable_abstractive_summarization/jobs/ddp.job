@@ -1,0 +1,49 @@
+#!/bin/bash
+#SBATCH -N 3
+#SBATCH --time=00:10:00
+#SBATCH -C TitanBlack
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:1
+
+#Define module command, etc
+# . ~/.profile
+#Load the pytorch module
+source activate venv_train
+module load opencl-nvidia/9.0
+#Number of processes per node to launch (20 for CPU, 2 for GPU)
+NPROC_PER_NODE=1
+
+#This command to run your pytorch script
+#You will want to replace this
+COMMAND="code/ddp_check.py"
+
+#We want names of master and slave nodes
+MASTER=`/bin/hostname -s`
+SLAVES=`scontrol show hostnames $SLURM_JOB_NODELIST | grep -v $MASTER`
+#Make sure this node (MASTER) comes first
+HOSTLIST="$MASTER $SLAVES"
+
+#Get a random unused port on this host(MASTER) between 2000 and 9999
+#First line gets list of unused ports
+#2nd line restricts between 2000 and 9999
+#3rd line gets single random port from the list
+MPORT=`ss -tan | awk '{print $4}' | cut -d':' -f2 | \
+	grep "[2-9][0-9]\{3,3\}" | grep -v "[0-9]\{5,5\}" | \
+	sort | uniq | shuf`
+
+
+
+#Launch the pytorch processes, first on master (first in $HOSTLIST) then
+#on the slaves
+RANK=0
+for node in $HOSTLIST; do
+	ssh -q $node \
+		pytorch -m torch.distributed.launch \
+		--nproces_per_node=$NPROCS_PER_NODE \
+		--nnodes=$SLURM_JOB_NUM_NODES \
+		--node_rank=$RANK \
+		--master_addr="$MASTER" --master_port="$MPORT" \
+		$COMMAND &
+	RANK=$((RANK+1))
+done
+wait
