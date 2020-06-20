@@ -659,13 +659,14 @@ def train():
         save_suffix += '_rouge'
     if 'sentiment' in controls:
         save_suffix += '_sent'
-        if not args.only_pos:
-            if args.only_neg:
-                save_suffix += '_onlyneg'
-            else:
-                save_suffix += '_all'
+        if args.only_neg:
+            save_suffix += '_onlyneg'
+        elif args.only_pos:
+            save_suffix += '_onlypos'
     if 'length' in controls:
         save_suffix += '_len'
+        if args.only_short:
+            save_suffix += '_onlyshort'
     if 'source' in controls:
         save_suffix += '_src'
     
