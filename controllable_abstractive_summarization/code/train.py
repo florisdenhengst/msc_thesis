@@ -934,7 +934,7 @@ def train():
                 
                 if args.reinforcement:
                     if args.ml_reinforcement:
-                        output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), sos_idx, eos_idx)
+                        output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), summary_to_pass.to(device), sos_idx, eos_idx)
                     else:
                         sample_output, output_tokens, baseline_tokens = model.rl_inference(story.to(device), sos_idx, eos_idx)
                     baseline_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in baseline_tokens]
@@ -1022,7 +1022,7 @@ def train():
                     
                     if args.reinforcement:
                         if args.ml_reinforcement:
-                            output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), sos_idx, eos_idx)
+                            output, sample_output, output_tokens, baseline_tokens = model.ml_rl_inference(story.to(device), summary_to_pass.to(device),sos_idx, eos_idx)
                         else:
                             sample_output, output_tokens, baseline_tokens = model.rl_inference(story.to(device), sos_idx, eos_idx)
                         baseline_to_rouge = [' '.join([txt_field.vocab.itos[ind] for ind in summ]) for summ in baseline_tokens]
