@@ -280,7 +280,7 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
     native_results = [None for i in range(len(batch.story))]
 
     for flex in flex_controls:
-
+        
         story = prepare_story_for_control_test(batch.story, txt_field, control=control, control_codes=flex)
         output = model.inference(story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
         output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
@@ -1003,7 +1003,7 @@ def train():
                     for n, score in enumerate(train_controls):                        
                         try:
                             # We substract 1 because we intialized the control performance list with zeros
-                            logger.info(f'{control_tokens[n]} performance: {sum(score) / (len(score) - 1)}.')
+                            logger.info(f'{control_tokens[n]} performance: {sum(score) / (len(score))}.')
                         except ZeroDivisionError:
                             logger.info(f'Cannot show {control_tokens[n]} performance yet.')
 
