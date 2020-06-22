@@ -641,9 +641,15 @@ def train():
     padding_idx = txt_field.vocab.stoi[txt_field.pad_token]
     sos_idx = txt_field.vocab.stoi['<sos>']
     eos_idx = txt_field.vocab.stoi['<eos>']
+    
     input_dim = len(txt_field.vocab.itos)
     output_dim = len(txt_field.vocab.itos)
-    
+    txt_field = add_tokens_to_vocab(txt_field, source_tokens_rl)
+    txt_field = add_tokens_to_vocab(txt_field, len_tokens_rl)
+
+    new_input_dim = len(txt_field.vocab.itos)
+    pass_input_dim = input_dim if args.epoch == 30 else new_input_dim
+
     end = time.time()
     logger.info(f'finished in {end-start} seconds.')
 
@@ -674,9 +680,9 @@ def train():
 
             
     logger.info(f'Initializing model with:') 
-    logger.info(f'Input dim: {input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
+    logger.info(f'Input dim: {pass_input_dim}, output dim: {output_dim}, emb dim: {args.emb_dim} hid dim: {args.hid_dim}, {args.n_layers} layers, {args.kernel_size}x1 kernel, {args.dropout_prob} dropout, sharing weights: {args.share_weights}, maximum length: {max_len}.')
 
-    model = ControllableSummarizer(input_dim=input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
+    model = ControllableSummarizer(input_dim=pass_input_dim, output_dim=output_dim, emb_dim=args.emb_dim, 
                                     hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
                                     dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
                                     share_weights=args.share_weights, max_length=max_len, self_attention=int(args.self_attention)).to(device)
@@ -691,11 +697,7 @@ def train():
             model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
         logger.info(f'Shape of word embeddings: {model.tok_embedding.weight.shape}')
         logger.info(f'Shape of positional embeddings: {model.pos_embedding.weight.shape}')
-        txt_field = add_tokens_to_vocab(txt_field, source_tokens_rl)
-        txt_field = add_tokens_to_vocab(txt_field, len_tokens_rl)
-        
-        new_input_dim = len(txt_field.vocab.itos)
-        if new_input_dim != input_dim:
+        if new_input_dim != pass_input_dim:
             model.resize_token_embeddings(new_input_dim)
             
         epoch = args.epoch
