@@ -971,17 +971,17 @@ def train():
                     baseline_controls.extend(baseline_perf)
 
                     rewards = rewards.type(torch.FloatTensor).to(device)
-                    print(loss)
-                    print(loss.shape)
-                    print([l for l in loss])
-                    detailed_loss['train']['logp'][-1].extend([l.item() for l in loss])
+                    # print(loss)
+                    # print(loss.shape)
+                    # print([l for l in loss])
+                    detailed_loss['train']['logp'][-1].extend([l.mean().item() for l in loss])
                     detailed_loss['train']['reward'][-1].append([r.item() for r in reward])
-                    detailed_loss['train']['code'][-1].append([c.item() for c in codes])
+                    detailed_loss['train']['code'][-1].append([c for c in codes])
                     
                     loss = torch.mul(rewards.unsqueeze(1), loss)
                     loss = loss.mean()
 
-                    detailed_loss['train']['loss'][-1].append([l.item() for l in loss])
+                    detailed_loss['train']['loss'][-1].append([l.mean().item() for l in loss])
 
 
 
@@ -1068,14 +1068,14 @@ def train():
 
                         rewards = rewards.type(torch.FloatTensor).to(device)
 
-                        detailed_loss['val']['logp'][-1].extend([l.item() for l in loss])
+                        detailed_loss['val']['logp'][-1].extend([l.mean().item() for l in loss])
                         detailed_loss['val']['reward'][-1].append([r.item() for r in reward])
                         detailed_loss['val']['code'][-1].append([c.item() for c in codes])
                         
                         loss = torch.mul(rewards.unsqueeze(1), loss)
                         loss = loss.mean()
 
-                        detailed_loss['val']['loss'][-1].append([l.item() for l in loss])
+                        detailed_loss['val']['loss'][-1].append([l.mean().item() for l in loss])
 
                         if args.ml_reinforcement:
                             summary = batch.summary[:,1:].contiguous().view(-1)
