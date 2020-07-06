@@ -701,7 +701,7 @@ def train():
     else:            
         epoch = args.epoch
         metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
-        detailed_loss = {'train': {'logp': [], 'reward': [], 'loss': []}, 'val': {'logp': [], 'reward': [], 'loss': []}}
+        detailed_loss = {'train': {'logp': [], 'reward': [], 'loss': [], 'codes':[]}, 'val': {'logp': [], 'reward': [], 'loss': [], 'codes':[]}}
         if Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl')):
             with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl'), 'rb') as file:
                 metrics  = pickle.load(file)
@@ -971,13 +971,15 @@ def train():
                     baseline_controls.extend(baseline_perf)
 
                     rewards = rewards.type(torch.FloatTensor).to(device)
-                    detailed_loss['train']['logp'][-1].append(loss.mean().item())
-                    detailed_loss['train']['reward'][-1].append(rewards.mean().item())
+                    detailed_loss['train']['logp'][-1].extend([l.item() for l in loss])
+                    detailed_loss['train']['reward'][-1].append([r.item() for r in reward])
+                    detailed_loss['train']['code'][-1].append([c.item() for c in codes])
                     
                     loss = torch.mul(rewards.unsqueeze(1), loss)
                     loss = loss.mean()
 
-                    detailed_loss['train']['loss'][-1].append(loss.item())
+                    detailed_loss['train']['loss'][-1].append([l.item() for l in loss])
+
 
 
                     if args.ml_reinforcement:
@@ -1063,13 +1065,14 @@ def train():
 
                         rewards = rewards.type(torch.FloatTensor).to(device)
 
-                        detailed_loss['val']['logp'][-1].append(loss.mean().item())
-                        detailed_loss['val']['reward'][-1].append(rewards.mean().item())
+                        detailed_loss['val']['logp'][-1].extend([l.item() for l in loss])
+                        detailed_loss['val']['reward'][-1].append([r.item() for r in reward])
+                        detailed_loss['val']['code'][-1].append([c.item() for c in codes])
                         
                         loss = torch.mul(rewards.unsqueeze(1), loss)
                         loss = loss.mean()
 
-                        detailed_loss['val']['loss'][-1].append(loss.item())
+                        detailed_loss['val']['loss'][-1].append([l.item() for l in loss])
 
                         if args.ml_reinforcement:
                             summary = batch.summary[:,1:].contiguous().view(-1)
