@@ -971,6 +971,9 @@ def train():
                     baseline_controls.extend(baseline_perf)
 
                     rewards = rewards.type(torch.FloatTensor).to(device)
+                    print(loss)
+                    print(loss.shape)
+                    print([l for l in loss])
                     detailed_loss['train']['logp'][-1].extend([l.item() for l in loss])
                     detailed_loss['train']['reward'][-1].append([r.item() for r in reward])
                     detailed_loss['train']['code'][-1].append([c.item() for c in codes])
