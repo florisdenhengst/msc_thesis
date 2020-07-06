@@ -694,13 +694,14 @@ def train():
     logger.info(f'Shape of positional embeddings: {model.pos_embedding.weight.shape}')
     if new_input_dim != pass_input_dim:
         model.resize_token_embeddings(new_input_dim)
-        
+
     if args.test:
         model.eval()
         metrics = {'test_loss':[], 'test_rouge':[]}
     else:            
         epoch = args.epoch
         metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
+        detailed_loss = {'train': {'logp': [], 'reward': [], 'loss': []}, 'val': {'logp': [], 'reward': [], 'loss': []}}
         if Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl')):
             with open(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl'), 'rb') as file:
                 metrics  = pickle.load(file)
@@ -907,6 +908,10 @@ def train():
             baseline_controls = []
             val_controls = [[] for i in range(len(control_tokens))]
 
+            for split in ['train', 'val']:
+                for key in detailed_loss[split].keys():
+                    detailed_loss[split][key].append([])
+            
             model.train()
 
 
@@ -966,8 +971,13 @@ def train():
                     baseline_controls.extend(baseline_perf)
 
                     rewards = rewards.type(torch.FloatTensor).to(device)
+                    detailed_loss['train']['logp'][-1].append(loss.mean().item())
+                    detailed_loss['train']['reward'][-1].append(rewards.mean().item())
+                    
                     loss = torch.mul(rewards.unsqueeze(1), loss)
                     loss = loss.mean()
+
+                    detailed_loss['train']['loss'][-1].append(loss.item())
 
 
                     if args.ml_reinforcement:
@@ -1052,8 +1062,15 @@ def train():
 
 
                         rewards = rewards.type(torch.FloatTensor).to(device)
+
+                        detailed_loss['val']['logp'][-1].append(loss.mean().item())
+                        detailed_loss['val']['reward'][-1].append(rewards.mean().item())
+                        
                         loss = torch.mul(rewards.unsqueeze(1), loss)
                         loss = loss.mean()
+
+                        detailed_loss['val']['loss'][-1].append(loss.item())
+
                         if args.ml_reinforcement:
                             summary = batch.summary[:,1:].contiguous().view(-1)
                             output = output.contiguous().view(-1, output.shape[-1])
@@ -1085,6 +1102,7 @@ def train():
             metrics['val_rouge'].append(val_rouge_scores)
             metrics['train_loss'].append(epoch_loss / batch_count)
             metrics['train_rouge'].append(rouge_scores)
+
 
             train_performance, train_count, val_performance, val_count = [], [], [], []
             for train_score, val_score in zip(train_controls, val_controls):   
@@ -1122,6 +1140,8 @@ def train():
                 pickle.dump(metrics, file)
             with open(Path(save_model_path, 'control_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
                 pickle.dump(control_performance, file)
+            with open(Path(save_model_path, 'detailed_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
+                pickle.dump(detailed_loss, file)
 
             logger.info(f'Recursion error count at {recursion_count}.')
 
