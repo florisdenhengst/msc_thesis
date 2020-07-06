@@ -686,20 +686,19 @@ def train():
                                     hid_dim=args.hid_dim, n_layers=args.n_layers, kernel_size=args.kernel_size, 
                                     dropout_prob=args.dropout_prob, device=device, padding_idx=padding_idx, 
                                     share_weights=args.share_weights, max_length=max_len, self_attention=int(args.self_attention)).to(device)
-    if args.test:
+    if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')):
+        model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')))
+    elif Path.exists(Path(save_model_path, 'summarizer.model')):
         model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
+    logger.info(f'Shape of word embeddings: {model.tok_embedding.weight.shape}')
+    logger.info(f'Shape of positional embeddings: {model.pos_embedding.weight.shape}')
+    if new_input_dim != pass_input_dim:
+        model.resize_token_embeddings(new_input_dim)
+        
+    if args.test:
         model.eval()
         metrics = {'test_loss':[], 'test_rouge':[]}
-    else:
-        if Path.exists(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')):
-            model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')))
-        elif Path.exists(Path(save_model_path, 'summarizer.model')):
-            model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
-        logger.info(f'Shape of word embeddings: {model.tok_embedding.weight.shape}')
-        logger.info(f'Shape of positional embeddings: {model.pos_embedding.weight.shape}')
-        if new_input_dim != pass_input_dim:
-            model.resize_token_embeddings(new_input_dim)
-            
+    else:            
         epoch = args.epoch
         metrics = {'train_loss':[], 'train_rouge':[], 'val_loss':[], 'val_rouge':[]}
         if Path.exists(Path(save_model_path, 'metrics_epoch_' + str(args.epoch) + save_suffix + '.pkl')):
