@@ -269,9 +269,9 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
     output = model.inference(batch.story.to(device), txt_field.vocab.stoi['<sos>'], txt_field.vocab.stoi['<eos>'])
     output_to_rouge, _ = prepare_summaries(torch.tensor(output), txt_field, output=True)
 
-    # Keep track of no control inference and control performanec
+    # Keep track of no control inference and control performance
     no_control_output = output_to_rouge
-    no_control_results = control_evl_fn(output_to_rouge, batch.summary, story, txt_field)
+    no_control_results = control_evl_fn(output_to_rouge, batch.summary, batch.story, txt_field)
 
     # Inference on input over all control codes
     flex_results = []
