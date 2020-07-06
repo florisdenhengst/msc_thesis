@@ -979,11 +979,9 @@ def train():
                     detailed_loss['train']['codes'][-1].append([c for c in codes])
                     
                     loss = torch.mul(rewards.unsqueeze(1), loss)
-                    print(loss.shape)
                     loss = loss.mean()
-                    print(loss.shape)
 
-                    detailed_loss['train']['loss'][-1].append([l.mean().item() for l in loss])
+                    detailed_loss['train']['loss'][-1].append(loss)
 
 
 
@@ -1070,14 +1068,14 @@ def train():
 
                         rewards = rewards.type(torch.FloatTensor).to(device)
 
-                        detailed_loss['val']['logp'][-1].extend([l.mean().item() for l in loss])
+                        detailed_loss['val']['logp'][-1].append([l.mean().item() for l in loss])
                         detailed_loss['val']['reward'][-1].append([r.item() for r in rewards])
                         detailed_loss['val']['codes'][-1].append([c.item() for c in codes])
                         
                         loss = torch.mul(rewards.unsqueeze(1), loss)
                         loss = loss.mean()
 
-                        detailed_loss['val']['loss'][-1].append([l.mean().item() for l in loss])
+                        detailed_loss['val']['loss'][-1].append(loss)
 
                         if args.ml_reinforcement:
                             summary = batch.summary[:,1:].contiguous().view(-1)
