@@ -1125,23 +1125,24 @@ def train():
             # Saving model if validation loss decreasing
             logger.info(metrics)
             logger.info(control_performance)
-
-            if epoch > 1:
-                if args.reinforcement:
+            logger.info(detailed_loss)
+            if args.full_train:
+                if epoch > 1:
+                    if args.reinforcement:
+                        save_model(model, save_model_path, epoch, save_suffix)    
+                    elif metrics['val_loss'][-1] < metrics['val_loss'][-2]:
+                        save_model(model, save_model_path, epoch, save_suffix)    
+                else:
                     save_model(model, save_model_path, epoch, save_suffix)    
-                elif metrics['val_loss'][-1] < metrics['val_loss'][-2]:
-                    save_model(model, save_model_path, epoch, save_suffix)    
-            else:
-                save_model(model, save_model_path, epoch, save_suffix)    
 
 
-            
-            with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
-                pickle.dump(metrics, file)
-            with open(Path(save_model_path, 'control_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
-                pickle.dump(control_performance, file)
-            with open(Path(save_model_path, 'detailed_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
-                pickle.dump(detailed_loss, file)
+            if args.full_train:            
+                with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
+                    pickle.dump(metrics, file)
+                with open(Path(save_model_path, 'control_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
+                    pickle.dump(control_performance, file)
+                with open(Path(save_model_path, 'detailed_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
+                    pickle.dump(detailed_loss, file)
 
             logger.info(f'Recursion error count at {recursion_count}.')
 
