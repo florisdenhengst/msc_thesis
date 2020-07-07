@@ -1070,7 +1070,7 @@ def train():
 
                         detailed_loss['val']['logp'][-1].append([l.mean().item() for l in loss])
                         detailed_loss['val']['reward'][-1].append([r.item() for r in rewards])
-                        detailed_loss['val']['codes'][-1].append([c.item() for c in codes])
+                        detailed_loss['val']['codes'][-1].append([c for c in codes])
                         
                         loss = torch.mul(rewards.unsqueeze(1), loss)
                         loss = loss.mean()
