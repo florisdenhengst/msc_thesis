@@ -844,7 +844,8 @@ def train():
         with model.eval() and torch.no_grad():
             for batch in test_iter:
                 batch_count += 1
-                
+                start = time.time()
+
                 if 'sentiment' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (sentiment_tokens, sentiment_codes), device)
@@ -853,13 +854,6 @@ def train():
                     len_codes = len_codes if args.reinforcement else None
                     outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (len_tokens, len_codes), device)
                     
-
-                start = time.time()
-                
-                
-                end = time.time()
-                logger.info(f'finished one control test in {end-start} seconds.')
-
                 control_performance = [all_len+ind_len for all_len, ind_len in zip(control_performance, batch_control_performance)]
 
                 no_control_rouge, _  = calculate_rouge(summary_to_rouge, outputs[0], rouge, no_control_rouge)
@@ -868,6 +862,9 @@ def train():
                 for i, r in enumerate(rouge_for_all):
                     rouge_scores, _ = calculate_rouge(summary_to_rouge, outputs[2][i], rouge, r)
                     rouge_for_all[i] = rouge_scores  
+                end = time.time()
+                logger.info(f'finished one control test in {end-start} seconds.')
+
                 if batch_count % 10 == 0:
                     logger.info(f'Processed {batch_count} batches.')
                     logger.info(f'True summary: {summary_to_rouge[0]}')
@@ -875,6 +872,7 @@ def train():
                         logger.info(f'Control category {lt}, output: {outputs[2][i][0]}')
                     logger.info(f'Batch control performance: {batch_control_performance}')
                     logger.info(f'Batch ROUGE: {temp_scores}.')
+
 
             logger.info(f'Done testing.')
             for i, r in enumerate(rouge_for_all):
