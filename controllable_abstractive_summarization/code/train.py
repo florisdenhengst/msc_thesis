@@ -1131,7 +1131,7 @@ def train():
             # Saving model if validation loss decreasing
             logger.info(metrics)
             logger.info(control_performance)
-            logger.info(detailed_loss)
+            # logger.info(detailed_loss)
             if args.full_train:
                 if epoch > 1:
                     if args.reinforcement:
