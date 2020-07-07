@@ -981,7 +981,7 @@ def train():
                     loss = torch.mul(rewards.unsqueeze(1), loss)
                     loss = loss.mean()
 
-                    detailed_loss['train']['loss'][-1].append(loss)
+                    detailed_loss['train']['loss'][-1].append(loss.item())
 
 
 
@@ -1075,7 +1075,7 @@ def train():
                         loss = torch.mul(rewards.unsqueeze(1), loss)
                         loss = loss.mean()
 
-                        detailed_loss['val']['loss'][-1].append(loss)
+                        detailed_loss['val']['loss'][-1].append(loss.item())
 
                         if args.ml_reinforcement:
                             summary = batch.summary[:,1:].contiguous().view(-1)
