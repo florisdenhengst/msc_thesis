@@ -860,7 +860,7 @@ def train():
                 control_results['no_control'].append(batch_control_performance[0])
                 # control_results['native'].append(batch_control_performance[1])
                 for i, control_category in enumerate(batch_control_performance[1]):
-                    control_performance[str(i)].append(control_category)
+                    control_results[str(i)].append(control_category)
 
 
                 no_control_rouge, _  = calculate_rouge(summary_to_rouge, outputs[0], rouge, no_control_rouge)
