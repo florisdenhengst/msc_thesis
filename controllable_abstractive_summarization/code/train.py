@@ -299,11 +299,11 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
     
     flex_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
     no_control_performance = sum(no_control_results['output'])/len(no_control_results['output'])
-    native_performance = sum(native_results['output'])/len(native_results['output'])
+    # native_performance = sum(native_results['output'])/len(native_results['output'])
 
     outputs = (no_control_output, native_output, flex_outputs)
     results = (no_control_results, native_results, flex_results)
-    performance = (no_control_performance, native_performance, flex_performance)
+    performance = (no_control_performance, flex_performance)
     
     return outputs, performance, results
 
@@ -838,7 +838,7 @@ def train():
         no_control_rouge = None
         batch_count = 0
 
-        control_results = {'no_control': [], 'native': []}
+        control_results = {'no_control': []}
         for i in range(len(control_tokens)):
             control_results[str(i)] = []
         rouge_for_all = [None for i in range(len(control_tokens))]
@@ -858,8 +858,8 @@ def train():
                     outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (len_tokens, len_codes), device)
                 
                 control_results['no_control'].append(batch_control_performance[0])
-                control_results['native'].append(batch_control_performance[1])
-                for i, control_category in enumerate(batch_control_performance[2]):
+                # control_results['native'].append(batch_control_performance[1])
+                for i, control_category in enumerate(batch_control_performance[1]):
                     control_performance[str(i)].append(control_category)
 
 
