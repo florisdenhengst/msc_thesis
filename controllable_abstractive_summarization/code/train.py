@@ -297,12 +297,15 @@ def test_on_control(model, batch, txt_field, control, control_tokens, device):
                 native_output[ind] = output_to_rouge[ind]
                 native_results[ind] = {kkey: flex_results[-1][kkey][ind] for kkey in flex_results[-1].keys()}
     
+    flex_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
+    no_control_performance = sum(no_control_results['output'])/len(no_control_results['output'])
+    native_performance = sum(native_results['output'])/len(native_results['output'])
+
     outputs = (no_control_output, native_output, flex_outputs)
     results = (no_control_results, native_results, flex_results)
+    performance = (no_control_performance, native_performance, flex_performance)
     
-    control_performance = [sum(flex['output'])/len(flex['output']) for flex in flex_results]
-    
-    return outputs, control_performance, results
+    return outputs, performance, results
 
 
 def test_on_length(batch, txt_field, len_tokens, len_codes=None):
@@ -366,12 +369,12 @@ def get_summary_sentiment_codes(summaries, txt_field, reinforcement):
             sentiment = sid.polarity_scores(summary)['compound']
             if reinforcement:
                 coin = random.random()
-                if sentiment > 0.05:
-                    sentiment_code = '<neg>' if coin > 0.5 else '<neu>'
-                elif sentiment < 0.05:
-                    sentiment_code = '<pos>' if coin > 0.5 else '<neu>'
+                if coin < 0.3334:
+                    sentiment_code = '<pos>'
+                elif coin < 0.6667:
+                    sentiment_code = '<neg>'
                 else:
-                    sentiment_code = '<pos>' if coin > 0.5 else '<neg>'
+                    sentiment_code = '<neu>'
             else:
                 if sentiment > 0.05:
                     sentiment_code = '<pos>'
@@ -429,13 +432,12 @@ def get_summary_length_codes(summaries, lengths, txt_field):
             code = '<long>'
         else:
             coin = random.random()
-            if int(length_code) < 4:
-                # This is the short summary category
-                code = '<medium>' if coin > 0.5 else '<long>'
-            elif int(length_code) < 8:
-                code = '<short>' if coin > 0.5 else '<long>'
+            if coin < 0.3334:
+                code = '<short>'
+            elif coin < 0.6667:
+                code = '<long>'
             else:
-                code = '<medium>' if coin > 0.5 else '<short>'
+                code = '<medium>'
         length_codes.append(code)
     return length_codes  
 
@@ -836,8 +838,9 @@ def train():
         no_control_rouge = None
         batch_count = 0
 
-        control_results = []
-        control_performance = [0 for i in range(len(control_tokens))]
+        control_results = {'no_control': [], 'native': []}
+        for i in range(len(control_tokens)):
+            control_results[str(i)] = []
         rouge_for_all = [None for i in range(len(control_tokens))]
         
 
@@ -853,8 +856,12 @@ def train():
                     story, summary_to_rouge, summary_to_pass, lead_3, len_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     len_codes = len_codes if args.reinforcement else None
                     outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (len_tokens, len_codes), device)
-                    
-                control_performance = [all_len+ind_len for all_len, ind_len in zip(control_performance, batch_control_performance)]
+                
+                control_results['no_control'].append(batch_control_performance[0])
+                control_results['native'].append(batch_control_performance[1])
+                for i, control_category in enumerate(batch_control_performance[2]):
+                    control_performance[str(i)].append(control_category)
+
 
                 no_control_rouge, _  = calculate_rouge(summary_to_rouge, outputs[0], rouge, no_control_rouge)
                 test_rouge, temp_scores = calculate_rouge(summary_to_rouge, outputs[1], rouge, test_rouge)
@@ -884,10 +891,9 @@ def train():
             logger.info(f'Rouge on test set, native controls: {test_rouge}.')
             logger.info(f'Rouge on test set, no controls: {no_control_rouge}.')
 
-            control_performance = [perf / batch_count for perf in control_performance]
-            logger.info(f'Control performance: {control_performance}')
-            # with open(Path(save_model_path, 'metrics_epoch_' + str(epoch) + '.pkl'), 'wb') as file:
-                # pickle.dump(metrics, file)
+            logger.info(f'Control performance: {sum(p) / len(p) for p in control_results}')
+            with open(Path(save_model_path, 'test_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
+                pickle.dump(control_results, file)
 
     else:
 
