@@ -699,6 +699,7 @@ def train():
 
     if args.test:
         model.eval()
+        epoch = args.epoch
         metrics = {'test_loss':[], 'test_rouge':[]}
     else:            
         epoch = args.epoch
