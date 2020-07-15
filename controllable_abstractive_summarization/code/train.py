@@ -879,7 +879,7 @@ def train():
                     for i, lt in enumerate(control_tokens):
                         logger.info(f'Control category {lt}, output: {outputs[2][i][0]}')
                     # logger.info(f'Batch control performance: {batch_control_performance}')
-                    logger.info(f'Control performance so far: {[sum(p) / len(p) for p in control_results]}')
+                    logger.info(f'Control performance so far: {[sum(control_results[p]) / len(control_results[p)] for p in control_results.keys()]}')
 
                     logger.info(f'ROUGE so far: {{key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}}.')
 
@@ -894,7 +894,7 @@ def train():
             logger.info(f'Rouge on test set, native controls: {test_rouge}.')
             logger.info(f'Rouge on test set, no controls: {no_control_rouge}.')
 
-            logger.info(f'Control performance: {[sum(p) / len(p) for p in control_results]}')
+            logger.info(f'Control performance: {[sum(control_results[p]) / len(control_results[p]) for p in control_results.keys()]}')
             with open(Path(save_model_path, 'test_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
                 pickle.dump(control_results, file)
 
