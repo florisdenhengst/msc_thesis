@@ -894,7 +894,7 @@ def train():
             logger.info(f'Rouge on test set, native controls: {test_rouge}.')
             logger.info(f'Rouge on test set, no controls: {no_control_rouge}.')
 
-            logger.info(f'Control performance: {[sum(p) / len(p) for p in control_results}]')
+            logger.info(f'Control performance: {[sum(p) / len(p) for p in control_results]}')
             with open(Path(save_model_path, 'test_epoch_' + str(epoch) + save_suffix + '.pkl'), 'wb') as file:
                 pickle.dump(control_results, file)
 
