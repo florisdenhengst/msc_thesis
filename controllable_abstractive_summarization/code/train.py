@@ -880,8 +880,8 @@ def train():
                         logger.info(f'Control category {lt}, output: {outputs[2][i][0]}')
                     # logger.info(f'Batch control performance: {batch_control_performance}')
                     logger.info(f'Control performance so far: {[sum(control_results[p]) / len(control_results[p]) for p in control_results.keys()]}')
-
-                    logger.info(f'ROUGE so far: {{key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}}.')
+                    print_rouge = {key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}
+                    logger.info(f'ROUGE so far: {print_rouge}.')
 
 
             logger.info(f'Done testing.')
