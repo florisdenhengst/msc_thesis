@@ -878,6 +878,8 @@ def train():
 
                 no_control_rouge, _  = calculate_rouge(summary_to_rouge, outputs[0], rouge, no_control_rouge)
                 test_rouge, temp_scores = calculate_rouge(summary_to_rouge, outputs[1], rouge, test_rouge)
+                logger.info(outputs)
+                logger.info(outputs.shape)
 
                 for i, r in enumerate(rouge_for_all):
                     rouge_scores, _ = calculate_rouge(summary_to_rouge, outputs[2][i], rouge, r)
