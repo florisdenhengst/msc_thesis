@@ -844,7 +844,20 @@ def train():
             control_results[str(i)] = []
         rouge_for_all = [None for i in range(len(control_tokens))]
         
-
+        if args.only_pos:
+            sentiment_all_tokens = ['<pos>']
+        elif args.only_neg:
+            sentiment_all_tokens = ['<neg>']
+        else:
+            sentiment_all_tokens = sentiment_tokens
+        if args.only_short:
+            len_all_tokens = ['<short>']
+        elif args.only_long:
+            len_all_tokens = ['<long>']
+        else:
+            len_all_tokens = len_tokens
+        
+        sentiment_all_codes = sentiment_codes
         with model.eval() and torch.no_grad():
             for batch in test_iter:
                 batch_count += 1
@@ -852,11 +865,11 @@ def train():
 
                 if 'sentiment' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (sentiment_tokens, sentiment_codes), device)
+                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (sentiment_all_tokens, sentiment_codes), device)
                 elif 'length' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, len_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     len_codes = len_codes if args.reinforcement else None
-                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (len_tokens, len_codes), device)
+                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (len_all_tokens, len_codes), device)
                 
                 control_results['no_control'].append(batch_control_performance[0])
                 # control_results['native'].append(batch_control_performance[1])
