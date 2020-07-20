@@ -838,19 +838,16 @@ def train():
         test_rouge = None
         no_control_rouge = None
         batch_count = 0
-        
+        control_all_tokens = control_tokens
         if args.only_pos:
             control_all_tokens = ['<pos>']
         elif args.only_neg:
             control_all_tokens = ['<neg>']
-        else:
-            control_all_tokens = control_tokens
+            
         if args.only_short:
             control_all_tokens = ['<short>']
         elif args.only_long:
             control_all_tokens = ['<long>']
-        else:
-            control_all_tokens = control_tokens
 
         control_results = {'no_control': []}
         for i in range(len(control_all_tokens)):
