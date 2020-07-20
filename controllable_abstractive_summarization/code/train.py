@@ -892,10 +892,12 @@ def train():
                     logger.info(f'True summary: {summary_to_rouge[0]}')
                     for i, lt in enumerate(control_all_tokens):
                         logger.info(f'Control category {lt}, output: {outputs[2][i][0]}')
+                        print_rouge = {key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in rouge_for_all[i].keys()}
+                        logger.info(f'ROUGE {lt} so far: {print_rouge}.')
                     # logger.info(f'Batch control performance: {batch_control_performance}')
                     logger.info(f'Control performance so far: {[sum(control_results[p]) / len(control_results[p]) for p in control_results.keys()]}')
-                    print_rouge = {key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}
-                    logger.info(f'ROUGE so far: {print_rouge}.')
+                    
+                    
 
 
             logger.info(f'Done testing.')
