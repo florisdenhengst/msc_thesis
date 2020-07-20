@@ -838,24 +838,24 @@ def train():
         test_rouge = None
         no_control_rouge = None
         batch_count = 0
-
-        control_results = {'no_control': []}
-        for i in range(len(control_tokens)):
-            control_results[str(i)] = []
-        rouge_for_all = [None for i in range(len(control_tokens))]
         
         if args.only_pos:
-            sentiment_all_tokens = ['<pos>']
+            control_all_tokens = ['<pos>']
         elif args.only_neg:
-            sentiment_all_tokens = ['<neg>']
+            control_all_tokens = ['<neg>']
         else:
-            sentiment_all_tokens = sentiment_tokens
+            control_all_tokens = control_tokens
         if args.only_short:
-            len_all_tokens = ['<short>']
+            control_all_tokens = ['<short>']
         elif args.only_long:
-            len_all_tokens = ['<long>']
+            control_all_tokens = ['<long>']
         else:
-            len_all_tokens = len_tokens
+            control_all_tokens = control_tokens
+
+        control_results = {'no_control': []}
+        for i in range(len(control_all_tokens)):
+            control_results[str(i)] = []
+        rouge_for_all = [None for i in range(len(control_all_tokens))]
         
         with model.eval() and torch.no_grad():
             for batch in test_iter:
@@ -864,11 +864,11 @@ def train():
 
                 if 'sentiment' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, sentiment_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
-                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (sentiment_all_tokens, sentiment_codes), device)
+                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (control_all_tokens, sentiment_codes), device)
                 elif 'length' in controls:
                     story, summary_to_rouge, summary_to_pass, lead_3, len_codes = prepare_batch(batch, txt_field, txt_nonseq_field, sent_end_inds, controls, reinforcement=args.reinforcement)
                     len_codes = len_codes if args.reinforcement else None
-                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (len_all_tokens, len_codes), device)
+                    outputs, batch_control_performance, results = test_on_control(model, batch, txt_field, controls[0], (control_all_tokens, len_codes), device)
                 
                 control_results['no_control'].append(batch_control_performance[0])
                 # control_results['native'].append(batch_control_performance[1])
@@ -890,7 +890,7 @@ def train():
                 if batch_count % 10 == 0:
                     logger.info(f'Processed {batch_count} batches.')
                     logger.info(f'True summary: {summary_to_rouge[0]}')
-                    for i, lt in enumerate(control_tokens):
+                    for i, lt in enumerate(control_all_tokens):
                         logger.info(f'Control category {lt}, output: {outputs[2][i][0]}')
                     # logger.info(f'Batch control performance: {batch_control_performance}')
                     logger.info(f'Control performance so far: {[sum(control_results[p]) / len(control_results[p]) for p in control_results.keys()]}')
@@ -901,7 +901,7 @@ def train():
             logger.info(f'Done testing.')
             for i, r in enumerate(rouge_for_all):
                 rouge_for_all[i] = {key: {metric: float(r[key][metric]/batch_count) for metric in r[key].keys()} for key in r.keys()}
-                logger.info(f'Rouge on test set, controls {control_tokens[i]}: {rouge_for_all[i]}.')
+                logger.info(f'Rouge on test set, controls {control_all_tokens[i]}: {rouge_for_all[i]}.')
 
             test_rouge = {key: {metric: float(test_rouge[key][metric]/batch_count) for metric in test_rouge[key].keys()} for key in test_rouge.keys()}
             no_control_rouge = {key: {metric: float(no_control_rouge[key][metric]/batch_count) for metric in no_control_rouge[key].keys()} for key in no_control_rouge.keys()}
