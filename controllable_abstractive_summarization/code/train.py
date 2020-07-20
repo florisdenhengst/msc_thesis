@@ -857,7 +857,6 @@ def train():
         else:
             len_all_tokens = len_tokens
         
-        sentiment_all_codes = sentiment_codes
         with model.eval() and torch.no_grad():
             for batch in test_iter:
                 batch_count += 1
