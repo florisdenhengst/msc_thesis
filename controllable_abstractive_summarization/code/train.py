@@ -692,8 +692,8 @@ def train():
         model.load_state_dict(torch.load(Path(save_model_path, 'summarizer_epoch_' + str(args.epoch) + save_suffix + '.model')))
     elif Path.exists(Path(save_model_path, 'summarizer.model')):
         model.load_state_dict(torch.load(Path(save_model_path, 'summarizer.model')))
-    logger.info(f'Shape of word embeddings: {model.tok_embedding.weight.shape}')
-    logger.info(f'Shape of positional embeddings: {model.pos_embedding.weight.shape}')
+    #logger.info(f'Shape of word embeddings: {model.tok_embedding.weight.shape}')
+    #logger.info(f'Shape of positional embeddings: {model.pos_embedding.weight.shape}')
     if new_input_dim != pass_input_dim:
         model.resize_token_embeddings(new_input_dim)
 
